@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # ============================================================
-#  launch_teleop.sh — Single-click teleoperation launcher
-#  Mecanum Wheel Robot (Yahboom / ROS 2)
+#  launch_simulation.sh — Run Gazebo + RViz simulation
+#  Mecanum Wheel Robot workstation launcher
 # ============================================================
 set -eo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSPACE="${SCRIPT_DIR}/robot_ws"
 
-# Align ROS Domain ID to see PC traffic
+# Align ROS Domain ID to see Pi traffic
 export ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-30}
 
 # ---- Source ROS 2 base ----
@@ -21,27 +21,25 @@ if [[ ! -f "${ROS_SETUP}" ]]; then
     exit 1
 fi
 
-# shellcheck source=/dev/null
 source "${ROS_SETUP}"
 
-# ---- Source workspace overlay ----
+# ---- Build if necessary ----
 WORKSPACE_SETUP="${WORKSPACE}/install/setup.bash"
 if [[ ! -f "${WORKSPACE_SETUP}" ]]; then
-    echo "[ERROR] Workspace not built. Running colcon build first..."
+    echo "[INFO] Building workspace..."
     cd "${WORKSPACE}"
     colcon build --symlink-install
-    echo "[INFO]  Build complete. Sourcing install..."
 fi
 
-# shellcheck source=/dev/null
 source "${WORKSPACE}/install/setup.bash"
 
-# ---- Launch ----
+# ---- Launch Simulation ----
 echo ""
 echo "┌──────────────────────────────────────────────┐"
-echo "│   🤖  Mecanum Wheel Robot — Teleoperation    │"
+echo "│   🤖  Mecanum Wheel Robot — Simulation       │"
+echo "│   Domain ID: ${ROS_DOMAIN_ID}                               │"
 echo "│   Press Ctrl+C to stop                       │"
 echo "└──────────────────────────────────────────────┘"
 echo ""
 
-ros2 launch omnibot_bringup robot_with_joy.launch.py
+ros2 launch omnibot_bringup simulation.launch.py
