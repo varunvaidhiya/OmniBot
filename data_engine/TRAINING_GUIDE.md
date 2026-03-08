@@ -160,72 +160,52 @@ Each episode is saved as a **ROS 2 bag** under:
 
 ---
 
-## 4. Converting Bags → Unified Dataset
+## 4. Converting Bags → Dataset
+
+All data is stored directly in **LeRobot v2.0 format** (Parquet + MP4). No intermediate HDF5 step.
 
 ### 4.1 Install Data Engine
 
 ```bash
 cd data_engine
 pip install -e .
-pip install -r requirements.txt
 ```
 
-### 4.2 Single Bag → HDF5
+### 4.2 Single Bag → Dataset Episode
 
 ```bash
-python ingestion/bag_to_hdf5.py \
+python -m data_engine.ingestion.bag_to_lerobot \
     --bag /data/episodes/pick_and_place_cube_ep000 \
-    --output /data/hdf5/pick_and_place_cube_ep000.h5 \
-    --topics \
-        /arm/joint_states \
-        /arm/joint_commands \
-        /odom \
-        /cmd_vel \
-        /camera/front/image_raw \
-        /camera/wrist/image_raw \
+    --dataset /data/lerobot/pick_and_place_cube \
+    --task "pick up the red cube and place it in the bin" \
     --fps 30
 ```
+
+Each call appends one episode to the dataset. Run again for each bag — `meta/info.json`, `episodes.jsonl`, and `stats.json` are updated automatically.
 
 ### 4.3 Batch Convert All Episodes
 
 ```bash
-python scripts/ingest_dataset.py \
+python -m data_engine.scripts.ingest_dataset \
     --input-dir /data/episodes \
-    --output-dir /data/hdf5 \
-    --workers 4 \
+    --output-dir /data/lerobot/pick_and_place_cube \
+    --task "pick up the red cube and place it in the bin" \
     --fps 30
 ```
 
-### 4.4 Convert HDF5 → LeRobot HF Format
-
-LeRobot's training pipeline expects Parquet + video files in a specific layout. Use the provided conversion script:
-
-```bash
-python lerobot_engine/convert_hdf5_to_lerobot.py \
-    --hdf5-dir /data/hdf5 \
-    --output-dir /data/lerobot_dataset/pick_and_place_cube \
-    --task-name "pick_and_place_cube" \
-    --chunk-size 50
-```
-
-> **Note:** `convert_hdf5_to_lerobot.py` needs to be written (see Section 4.5 below).
-
-### 4.5 What the Conversion Script Must Do
-
-The LeRobot HF dataset format requires:
+### 4.4 Dataset Layout
 
 ```
-/data/lerobot_dataset/pick_and_place_cube/
+/data/lerobot/pick_and_place_cube/
   meta/
-    info.json          ← dataset metadata (fps, action/state dims, num_episodes)
-    tasks.jsonl        ← one line per task {"task_index":0,"task":"pick_and_place_cube"}
-    episodes.jsonl     ← one line per episode {"episode_index":N,"tasks":[0],"length":T}
+    info.json          ← fps, total_episodes, total_frames, feature shapes
+    tasks.jsonl        ← {"task_index":0, "task":"pick up the red cube..."}
+    episodes.jsonl     ← {"episode_index":N, "tasks":[0], "length":T}
     stats.json         ← per-feature mean/std/min/max for normalisation
   data/
     chunk-000/
-      episode_000000.parquet
+      episode_000000.parquet   ← state[9], action[9], timestamp, indices
       episode_000001.parquet
-      ...
   videos/
     chunk-000/
       observation.images.front/
@@ -234,29 +214,17 @@ The LeRobot HF dataset format requires:
         episode_000000.mp4
 ```
 
-Each Parquet row has columns:
-```
-observation.state          float32[9]
-action                     float32[9]
-observation.images.front   str  (path to video frame — handled by lerobot internally)
-observation.images.wrist   str
-timestamp                  float64  (seconds from episode start)
-frame_index                int64
-episode_index              int64
-index                      int64  (global frame index)
-task_index                 int64
-next.done                  bool
-```
-
-### 4.6 Validate the Dataset
+### 4.5 Validate the Dataset
 
 ```bash
-python scripts/validate_dataset.py --dataset /data/hdf5 --verbose
+python -m data_engine.scripts.validate_dataset \
+    --dataset /data/lerobot/pick_and_place_cube \
+    --verbose
 
-# Check a specific episode visually
-python visualization/visualize_episode.py \
-    --file /data/hdf5/pick_and_place_cube_ep000.h5 \
-    --episode 0
+# Visually play back episode 3
+python -m data_engine.visualization.visualize_episode \
+    --dataset /data/lerobot/pick_and_place_cube \
+    --episode 3
 ```
 
 ---
@@ -387,47 +355,39 @@ Record 50 demos → Train → Test → Identify failures
 
 ### 7.1 Dataset Expansion
 
+Just run the ingest script again pointing at new bags — it appends to the existing dataset:
+
 ```bash
-# Add new episodes to existing dataset
-python scripts/ingest_dataset.py \
+python -m data_engine.scripts.ingest_dataset \
     --input-dir /data/episodes_v2 \
-    --output-dir /data/hdf5 \
-    --workers 4
+    --output-dir /data/lerobot/pick_and_place_cube \
+    --task "pick up the red cube and place it in the bin"
 
-# Re-run LeRobot conversion (will append new episodes)
-python lerobot_engine/convert_hdf5_to_lerobot.py \
-    --hdf5-dir /data/hdf5 \
-    --output-dir /data/lerobot_dataset/pick_and_place_cube \
-    --task-name "pick_and_place_cube" \
-    --chunk-size 50
-
-# Resume training from checkpoint
+# Resume training from best checkpoint
 python lerobot_engine/train.py \
-    --dataset-path /data/lerobot_dataset/pick_and_place_cube \
-    --config configs/smolvla_mobile_manip.yaml \
+    --dataset-path /data/lerobot/pick_and_place_cube \
     --output-dir /data/checkpoints/smolvla_manip_v2 \
-    --resume-from /data/checkpoints/smolvla_manip_v1/best/model.pt \
-    --epochs 50
+    --resume-from /data/checkpoints/smolvla_manip_v1/best \
+    --num-epochs 50
 ```
 
 ### 7.2 Multi-Task Training
 
-To train on multiple tasks at once, merge datasets:
+Point multiple ingest runs at the same output directory with different `--task` strings:
 
 ```bash
-python lerobot_engine/convert_hdf5_to_lerobot.py \
-    --hdf5-dir /data/hdf5 \
-    --output-dir /data/lerobot_dataset/multi_task \
-    --task-name "pick_and_place_cube" \
-    --chunk-size 50
+python -m data_engine.scripts.ingest_dataset \
+    --input-dir /data/bags/pick_place \
+    --output-dir /data/lerobot/multi_task \
+    --task "pick up the red cube and place it in the bin"
 
-# Add second task to same dataset dir
-python lerobot_engine/convert_hdf5_to_lerobot.py \
-    --hdf5-dir /data/hdf5_task2 \
-    --output-dir /data/lerobot_dataset/multi_task \   # same output
-    --task-name "push_button" \
-    --chunk-size 50
+python -m data_engine.scripts.ingest_dataset \
+    --input-dir /data/bags/push_button \
+    --output-dir /data/lerobot/multi_task \
+    --task "push the green button"
 ```
+
+SmolVLA conditions on the task string at inference time, so multi-task training works out of the box.
 
 ---
 
@@ -442,13 +402,14 @@ python lerobot_engine/convert_hdf5_to_lerobot.py \
 | `robot_ws/src/omnibot_lerobot/omnibot_lerobot/teleop_recorder_node.py` | ROS 2 recorder (live robot) |
 | `robot_ws/src/omnibot_lerobot/omnibot_lerobot/smolvla_node.py` | ROS 2 inference node |
 | `robot_ws/src/omnibot_arm/config/arm_params.yaml` | Arm motor IDs, ports, home ticks |
-| `data_engine/ingestion/bag_to_hdf5.py` | ROS bag → HDF5 conversion |
-| `data_engine/ingestion/ros_parser.py` | Low-level bag parsing (cameras, odom, cmd_vel) |
+| `data_engine/ingestion/bag_to_lerobot.py` | ROS bag → LeRobot Parquet + MP4 |
+| `data_engine/ingestion/ros_parser.py` | Low-level ROS bag parsing (cameras, odom, cmd_vel) |
 | `data_engine/ingestion/sync_topics.py` | Multi-modal timestamp synchronisation |
-| `data_engine/schema/constants.py` | 9D state/action spec definitions |
-| `data_engine/schema/format.py` | HDF5 group/dataset schema |
-| `data_engine/loader/dataset.py` | PyTorch Dataset over HDF5 files |
-| `data_engine/visualization/visualize_episode.py` | Playback episodes with OpenCV overlay |
+| `data_engine/schema/constants.py` | 9D state/action spec, camera configs |
+| `data_engine/loader/dataset.py` | Lightweight PyTorch Dataset over Parquet files |
+| `data_engine/scripts/ingest_dataset.py` | Batch convert bags → dataset |
+| `data_engine/scripts/validate_dataset.py` | Validate LeRobot dataset integrity |
+| `data_engine/visualization/visualize_episode.py` | Play back episodes with OpenCV overlay |
 
 ---
 

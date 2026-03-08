@@ -1,65 +1,74 @@
-#!/usr/bin/env python3
 """
-Batch process multiple ROS bags into a single or multiple HDF5 datasets.
+ingest_dataset.py
+-----------------
+Batch-convert a directory of ROS 2 bags into a single LeRobot v2.0 dataset.
+
+Usage:
+    python -m data_engine.scripts.ingest_dataset \\
+        --input-dir /data/bags/pick_place \\
+        --output-dir /data/lerobot/pick_place \\
+        --task "pick up the red cube and place it in the bin" \\
+        --fps 30
+
+NOTE: Use --workers 1 (default) to avoid concurrent writes to meta/*.jsonl.
 """
+
+from __future__ import annotations
+
+import multiprocessing as mp
+from pathlib import Path
 
 import click
-import os
-import subprocess
-from pathlib import Path
-from tqdm import tqdm
-import multiprocessing
+
+from data_engine.ingestion.bag_to_lerobot import bag_to_lerobot
+
+
+def _worker(args: tuple) -> None:
+    bag_path, dataset_root, task, fps = args
+    try:
+        bag_to_lerobot(bag_path, dataset_root, task, fps)
+    except Exception as e:
+        print(f"[ERROR] {bag_path}: {e}")
+
 
 @click.command()
-@click.option('--input-dir', '-i', required=True, type=click.Path(exists=True),
-              help='Directory containing multiple ROS bag directories')
-@click.option('--output-dir', '-o', required=True, type=click.Path(),
-              help='Directory to save HDF5 files')
-@click.option('--workers', '-w', default=1, help='Number of parallel workers')
-def batch_ingest(input_dir, output_dir, workers):
-    """Batch convert all ROS bags in a directory."""
-    
-    input_path = Path(input_dir)
+@click.option("--input-dir",  required=True, type=click.Path(exists=True),
+              help="Directory containing ROS 2 bag folders")
+@click.option("--output-dir", required=True,
+              help="LeRobot dataset root to write episodes to")
+@click.option("--task",       required=True,
+              help="Natural language task description")
+@click.option("--fps",        default=30, show_default=True,
+              help="Target frame rate")
+@click.option("--workers",    default=1, show_default=True,
+              help="Parallel workers (keep at 1 to avoid meta write conflicts)")
+@click.option("--pattern",    default="*", show_default=True,
+              help="Glob pattern to match bag directories (e.g. 'ep*')")
+def main(input_dir: str, output_dir: str, task: str,
+         fps: int, workers: int, pattern: str) -> None:
+
+    input_path  = Path(input_dir)
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
-    
-    # Find all bag directories (assuming metadata.yaml exists)
-    bags = sorted([p.parent for p in input_path.rglob('metadata.yaml')])
-    
-    print(f"Found {len(bags)} bags in {input_dir}")
-    
-    commands = []
-    for bag in bags:
-        # Create output filename based on bag name
-        bag_name = bag.name
-        h5_name = f"{bag_name}.h5"
-        out_file = output_path / h5_name
-        
-        # Construct command
-        cmd = [
-            'python', '-m', 'data_engine.ingestion.bag_to_hdf5',
-            '--input', str(bag),
-            '--output', str(out_file),
-            '--episode-name', bag_name
-        ]
-        commands.append((cmd, bag_name))
 
-    # Run processing
+    bags = sorted(p for p in input_path.glob(pattern) if p.is_dir())
+    if not bags:
+        click.echo(f"[WARN] No bag directories found in {input_dir} matching '{pattern}'")
+        return
+
+    click.echo(f"Found {len(bags)} bag(s). Writing to {output_dir} ...")
+
+    job_args = [(str(b), str(output_path), task, fps) for b in bags]
+
     if workers > 1:
-        with multiprocessing.Pool(workers) as pool:
-            results = pool.map(run_command, commands)
+        with mp.Pool(processes=workers) as pool:
+            pool.map(_worker, job_args)
     else:
-        for cmd, name in tqdm(commands, desc="Processing bags"):
-            run_command((cmd, name))
+        for args in job_args:
+            _worker(args)
 
-def run_command(args):
-    cmd, name = args
-    try:
-        subprocess.run(cmd, check=True, capture_output=True, text=True)
-        return True
-    except subprocess.CalledProcessError as e:
-        print(f"Error processing {name}: {e.stderr}")
-        return False
+    click.echo(f"Done. Dataset: {output_dir}")
 
-if __name__ == '__main__':
-    batch_ingest()
+
+if __name__ == "__main__":
+    main()

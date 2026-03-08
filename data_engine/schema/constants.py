@@ -74,10 +74,37 @@ class CameraConfig:
     fps: int
     encoding: str
 
-DEFAULT_CAMERAS = [
-    CameraConfig('front', '/camera/front/image_raw/compressed', (480, 640), 30, 'rgb8'),
-    CameraConfig('wrist', '/camera/wrist/image_raw/compressed', (480, 640), 30, 'rgb8'),
-]
+    @property
+    def height(self) -> int:
+        return self.resolution[0]
+
+    @property
+    def width(self) -> int:
+        return self.resolution[1]
+
+CAMERA_FRONT = CameraConfig(
+    name='front',
+    topic='/camera/front/image_raw',
+    resolution=(480, 640),
+    fps=30,
+    encoding='bgr8',
+)
+
+CAMERA_WRIST = CameraConfig(
+    name='wrist',
+    topic='/camera/wrist/image_raw',
+    resolution=(240, 320),
+    fps=30,
+    encoding='bgr8',
+)
+
+ALL_CAMERAS = [CAMERA_FRONT, CAMERA_WRIST]
+
+# LeRobot feature key → CameraConfig mapping
+LEROBOT_CAMERA_KEYS = {
+    "observation.images.front": CAMERA_FRONT,
+    "observation.images.wrist": CAMERA_WRIST,
+}
 
 # ---------------------------------------------------------------------------
 # Mobile manipulation — unified 9D state / action specs

@@ -29,6 +29,11 @@ try:
     LEROBOT_AVAILABLE = True
 except ImportError:
     LEROBOT_AVAILABLE = False
+    # Fallback: use the lightweight loader from the data_engine package
+    try:
+        from data_engine.loader.dataset import LeRobotDatasetLite as LeRobotDataset
+    except ImportError:
+        LeRobotDataset = None
 
 
 # ---------------------------------------------------------------------------
@@ -175,10 +180,14 @@ def main():
     # Load dataset
     # ------------------------------------------------------------------
     print('\nLoading dataset...')
-    train_dataset = LeRobotDataset(
-        repo_id='local/mobile_manipulation',
-        root=str(dataset_path),
-    )
+    if not LEROBOT_AVAILABLE and LeRobotDataset is None:
+        print('[ERROR] Neither lerobot nor data_engine is installed.')
+        return
+    if LEROBOT_AVAILABLE:
+        train_dataset = LeRobotDataset(str(dataset_path))
+    else:
+        train_dataset = LeRobotDataset(str(dataset_path),
+                                       chunk_size=args.chunk_size)
     # Use 90/10 train/eval split if dataset supports it
     split_idx = int(len(train_dataset) * 0.9)
     indices_train = list(range(split_idx))
