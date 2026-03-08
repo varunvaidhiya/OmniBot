@@ -91,6 +91,11 @@ class RobotRepository @Inject constructor() {
         rosManager?.publish(Constants.TOPIC_EMERGENCY_STOP, mapOf("data" to true))
     }
 
+    fun sendMode(mode: RobotMode) {
+        rosManager?.publish(Constants.TOPIC_ROBOT_MODE, mapOf("data" to mode.name))
+        _robotStatus.value = _robotStatus.value.copy(currentMode = mode)
+    }
+
     // ── Subscriptions ─────────────────────────────────────────────────────────
 
     private fun subscribeToTopics() {
