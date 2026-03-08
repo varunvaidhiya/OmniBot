@@ -65,8 +65,8 @@ class YahboomControllerNode(Node):
         self.odom_pub = self.create_publisher(Odometry, 'odom', 10)
         self.tf_broadcaster = TransformBroadcaster(self)
         
-        # Timer: 10Hz (0.1s)
-        self.update_timer = self.create_timer(0.1, self.update_callback)
+        # Timer: 20Hz (0.05s)
+        self.update_timer = self.create_timer(0.05, self.update_callback)
         
         # Serial Setup
         self.serial_port = None
@@ -158,7 +158,7 @@ class YahboomControllerNode(Node):
             
             # CLAMP SPEED to prevent Brownout/Over-current - SAFE MODE
             MAX_VAL = 0.2  # m/s
-            RAMP_STEP = 0.02  # m/s per 0.1s tick
+            RAMP_STEP = 0.05  # m/s per 0.05s tick
             
             target_vx = np.clip(msg.linear.x, -MAX_VAL, MAX_VAL)
             target_vy = np.clip(msg.linear.y, -MAX_VAL, MAX_VAL)

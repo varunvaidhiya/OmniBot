@@ -1,21 +1,21 @@
 teleop_twist_joy_node:
   ros__parameters:
     axis_linear:
-      x: 1  # Left Stick Vertical
-      y: 0  # Left Stick Horizontal
+      x: 0  # Left Stick Horizontal
+      y: 1  # Left Stick Vertical
     scale_linear:
-      x: 0.5  # Max 0.5 m/s
-      y: 0.5
+      x: 0.125  # Max 0.125 m/s
+      y: 0.125
     scale_linear_turbo:
-      x: 1.0  # Max 1.0 m/s with turbo
-      y: 1.0
+      x: 0.25  # Max 0.25 m/s with turbo
+      y: 0.25
     
     axis_angular:
       yaw: 3  # Right Stick Horizontal
     scale_angular:
-      yaw: 1.0  # Max 1.0 rad/s
+      yaw: 0.25  # Max 0.25 rad/s
     scale_angular_turbo:
-      yaw: 2.0
+      yaw: 0.5
 
     enable_button: 5  # RB (Right Bumper) as deadman switch
     enable_turbo_button: 7 # RT (Right Trigger) or adjust as needed
