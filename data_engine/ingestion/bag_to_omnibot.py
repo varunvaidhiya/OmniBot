@@ -1,5 +1,5 @@
 """
-bag_to_lerobot.py
+bag_to_omnibot.py
 -----------------
 Convert a single ROS 2 bag into a LeRobot v2.0 dataset episode.
 
@@ -21,7 +21,7 @@ Output layout (appended to an existing or new dataset root):
                     episode_XXXXXX.mp4
 
 Usage (CLI):
-    python -m data_engine.ingestion.bag_to_lerobot \
+    python -m data_engine.ingestion.bag_to_omnibot \
         --bag /data/bags/ep000 \
         --dataset /data/lerobot/pick_place \
         --task "pick up the red cube" \
@@ -174,7 +174,7 @@ def _compute_stats(
 
 # ── Core conversion ──────────────────────────────────────────────────────────
 
-def bag_to_lerobot(
+def bag_to_omnibot(
     bag_path: str | Path,
     dataset_root: str | Path,
     task_name: str,
@@ -270,7 +270,7 @@ def bag_to_lerobot(
     # ── Update running stats ──────────────────────────────────────────────
     _update_stats(dataset_root, rows)
 
-    print(f"[bag_to_lerobot] episode {episode_idx} written ({ep_length} frames) → {ep_str}")
+    print(f"[bag_to_omnibot] episode {episode_idx} written ({ep_length} frames) → {ep_str}")
     return episode_idx
 
 
@@ -308,7 +308,7 @@ def _update_stats(dataset_root: Path, rows: list[dict]) -> None:
 @click.option("--task",    required=True, help="Natural language task description")
 @click.option("--fps",     default=30,   show_default=True, help="Target frame rate")
 def main(bag: str, dataset: str, task: str, fps: int) -> None:
-    bag_to_lerobot(bag, dataset, task, fps)
+    bag_to_omnibot(bag, dataset, task, fps)
 
 
 if __name__ == "__main__":

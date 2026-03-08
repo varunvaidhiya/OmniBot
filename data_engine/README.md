@@ -33,7 +33,7 @@ pip install -e .
 
 ### ROS 2 bag → dataset (single episode)
 ```bash
-python -m data_engine.ingestion.bag_to_lerobot \
+python -m data_engine.ingestion.bag_to_omnibot \
     --bag /data/bags/ep000 \
     --dataset /data/lerobot/pick_place \
     --task "pick up the red cube" \

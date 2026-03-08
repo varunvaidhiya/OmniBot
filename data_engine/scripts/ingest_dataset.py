@@ -20,13 +20,13 @@ from pathlib import Path
 
 import click
 
-from data_engine.ingestion.bag_to_lerobot import bag_to_lerobot
+from data_engine.ingestion.bag_to_omnibot import bag_to_omnibot
 
 
 def _worker(args: tuple) -> None:
     bag_path, dataset_root, task, fps = args
     try:
-        bag_to_lerobot(bag_path, dataset_root, task, fps)
+        bag_to_omnibot(bag_path, dataset_root, task, fps)
     except Exception as e:
         print(f"[ERROR] {bag_path}: {e}")
 

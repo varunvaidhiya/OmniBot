@@ -174,7 +174,7 @@ pip install -e .
 ### 4.2 Single Bag → Dataset Episode
 
 ```bash
-python -m data_engine.ingestion.bag_to_lerobot \
+python -m data_engine.ingestion.bag_to_omnibot \
     --bag /data/episodes/pick_and_place_cube_ep000 \
     --dataset /data/lerobot/pick_and_place_cube \
     --task "pick up the red cube and place it in the bin" \
@@ -402,7 +402,7 @@ SmolVLA conditions on the task string at inference time, so multi-task training 
 | `robot_ws/src/omnibot_lerobot/omnibot_lerobot/teleop_recorder_node.py` | ROS 2 recorder (live robot) |
 | `robot_ws/src/omnibot_lerobot/omnibot_lerobot/smolvla_node.py` | ROS 2 inference node |
 | `robot_ws/src/omnibot_arm/config/arm_params.yaml` | Arm motor IDs, ports, home ticks |
-| `data_engine/ingestion/bag_to_lerobot.py` | ROS bag → LeRobot Parquet + MP4 |
+| `data_engine/ingestion/bag_to_omnibot.py` | ROS bag → LeRobot Parquet + MP4 |
 | `data_engine/ingestion/ros_parser.py` | Low-level ROS bag parsing (cameras, odom, cmd_vel) |
 | `data_engine/ingestion/sync_topics.py` | Multi-modal timestamp synchronisation |
 | `data_engine/schema/constants.py` | 9D state/action spec, camera configs |
