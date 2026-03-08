@@ -1,0 +1,22 @@
+arm_driver_node:
+  ros__parameters:
+    follower_port: /dev/ttyACM0
+    leader_port: /dev/ttyACM1
+    baudrate: 1000000
+    publish_rate: 100.0
+    teleop_mode: false
+    # STS3215 servo: 4096 ticks = 360 degrees
+    ticks_per_rev: 4096
+    joint_names:
+      - shoulder_pan
+      - shoulder_lift
+      - elbow_flex
+      - wrist_flex
+      - wrist_roll
+      - gripper
+    motor_ids: [1, 2, 3, 4, 5, 6]
+    # Joint limits in radians
+    joint_min: [-3.14, -1.57, -1.57, -1.57, -3.14, -0.1]
+    joint_max: [ 3.14,  1.57,  1.57,  1.57,  3.14,  0.8]
+    # Home position ticks (calibrated via lerobot-calibrate)
+    home_ticks: [2048, 2048, 2048, 2048, 2048, 2048]

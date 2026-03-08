@@ -1,0 +1,21 @@
+smolvla_node:
+  ros__parameters:
+    checkpoint_path: "lerobot/smolvla_base"
+    device: "cuda"
+    policy_hz: 10.0
+    chunk_size: 50
+    state_dim: 9
+    action_dim: 9
+    image_width: 320
+    image_height: 240
+    task_description: "pick up the object and place it in the bin"
+    base_vel_scale: 0.3
+
+teleop_recorder_node:
+  ros__parameters:
+    output_dir: "~/datasets/mobile_manipulation"
+    repo_id: "local/mobile_manipulation"
+    record_hz: 30.0
+    episode_timeout_s: 60.0
+    joy_record_button: 7
+    joy_discard_button: 6
