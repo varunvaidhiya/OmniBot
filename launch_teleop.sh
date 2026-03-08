@@ -8,8 +8,8 @@ set -eo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSPACE="${SCRIPT_DIR}/robot_ws"
 
-# Align ROS Domain ID to see PC traffic
-export ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-30}
+# ---- ROS Domain (must match all terminals) ----
+export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-30}"
 
 # ---- Source ROS 2 base ----
 ROS_DISTRO="${ROS_DISTRO:-jazzy}"
