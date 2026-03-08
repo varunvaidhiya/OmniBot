@@ -10,9 +10,10 @@ class DashboardViewModel @Inject constructor(
     private val repository: RobotRepository
 ) : ViewModel() {
     
-    val wheelSpeeds = repository.wheelSpeeds
-    val motorData = repository.motorData
-    val robotStatus = repository.robotStatus
     val connectionState = repository.connectionState
+    val robotStatus    = repository.robotStatus
+    val odomData       = repository.odomData
+    val wheelSpeeds    = repository.wheelSpeeds
+    val motorData      = repository.motorData
 
 }

@@ -15,14 +15,21 @@ object Constants {
     const val MAX_ANGULAR_VELOCITY = 2.0f // rad/s
     const val CMD_VEL_PUBLISH_RATE_HZ = 20
     
-    // ROS Topics
+    // ROS Topics — publish
     const val TOPIC_CMD_VEL = "/cmd_vel"
+    const val TOPIC_EMERGENCY_STOP = "/emergency_stop"
+    const val TOPIC_ROBOT_MODE = "/robot_mode"
+
+    // ROS Topics — subscribe
+    const val TOPIC_ODOM = "/odom"
+    const val TOPIC_MAP = "/map"
+    const val TOPIC_IMU = "/imu/data"
+    const val TOPIC_DIAGNOSTICS = "/diagnostics"
+
+    // Legacy custom topics (kept for compatibility)
     const val TOPIC_ROBOT_STATUS = "/robot_status"
     const val TOPIC_WHEEL_SPEEDS = "/wheel_speeds"
     const val TOPIC_MOTOR_PWM = "/motor_pwm"
-    const val TOPIC_DIAGNOSTICS = "/diagnostics"
-    const val TOPIC_EMERGENCY_STOP = "/emergency_stop"
-    const val TOPIC_ROBOT_MODE = "/robot_mode"
     
     // UI
     const val CHART_MAX_DATA_POINTS = 300
