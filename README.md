@@ -1,293 +1,221 @@
-# OmniBot Mecanum Wheel Robot
+# OmniBot — Low-Cost Mobile Manipulation with SmolVLA
 
-A **ROS 2–based omnidirectional mobile robot platform** designed for **embodied AI research**, integrating real-world data collection, **Vision–Language–Action (VLA)** model inference, and human-in-the-loop control via an Android application.
+> **A $500 mobile manipulation robot** that learns pick-and-place tasks from ~50 human demonstrations.
+> Mecanum base + SO-101 arm controlled by a single learned policy. Fully open-source.
 
-This repository follows a **monorepo architecture**, hosting robot runtime software, data infrastructure, learning/inference pipelines, and user-facing interfaces in a single, well-structured codebase.
+<!-- Replace with your demo GIF/video once arm arrives -->
+<!-- ![OmniBot demo](docs/assets/demo.gif) -->
 
----
-
-## Overview
-
-OmniBot is a mecanum wheel robot system that supports:
-
-* Omnidirectional mecanum wheel kinematics
-* Multiple low-level motor control backends (STM32, Yahboom)
-* ROS 2–based robot runtime and navigation stack (Jazzy)
-* **Autonomous navigation with SLAM and waypoint following**
-* **Sensors: Xbox Kinect V2 (Depth) + Logitech Webcam (RGB)**
-* **Structured data collection for VLA model fine-tuning**
-* **Standalone VLA inference engine (edge or desktop)**
-* Android tablet/phone app for monitoring, teleoperation, and voice control
-
-The system is designed to scale from **manual teleoperation** to **learning-based autonomy**.
+<p align="center">
+  <a href="../../wiki/Bill-of-Materials"><img src="https://img.shields.io/badge/BOM-Wiki-blue"/></a>
+  <img src="https://img.shields.io/badge/ROS_2-Jazzy-brightgreen"/>
+  <img src="https://img.shields.io/badge/Policy-SmolVLA-orange"/>
+  <img src="https://img.shields.io/badge/License-MIT-yellow"/>
+</p>
 
 ---
 
-## High-Level Architecture
+## Why OmniBot?
+
+| | OmniBot | Mobile ALOHA | Hello Stretch |
+|--|--|--|--|
+| **Cost** | **~$500** | ~$32,000 | ~$25,000 |
+| **Base type** | **Holonomic (mecanum)** | Differential | Differential |
+| **Policy** | SmolVLA (unified) | ACT | Various |
+| **Open-source** | Yes | Yes | Yes |
+| **ROS 2** | Yes | Partial | Yes |
+
+**Three things that make it different:**
+
+- **Holonomic base** — strafes, rotates in place, moves diagonally. No repositioning maneuvers before grasping. Differential drive robots can't do this.
+- **Unified 9D policy** — SmolVLA controls the arm (6 joints) and base (vx, vy, vz) as a single output vector. One model, one action space, one training run.
+- **End-to-end open pipeline** — teleoperation recording → LeRobot v2.0 dataset → fine-tuned SmolVLA → ROS 2 inference. Every piece is in this repo.
+
+---
+
+## Hardware
+
+See the **[Bill of Materials →](../../wiki/Bill-of-Materials)** for parts, suppliers, and prices.
+
+**Key components:**
+- Raspberry Pi 5 8GB (robot brain)
+- Yahboom ROS Robot Expansion Board (motor driver + encoders)
+- SO-101 Arm — 6-DOF, Feetech STS3215 servos (~$100)
+- 2× USB cameras (front workspace + wrist)
+- Xbox controller (base teleoperation)
+- Desktop PC with NVIDIA GPU (SmolVLA training + inference)
+
+---
+
+## Quickstart
+
+### 1. Build the ROS 2 workspace
+
+```bash
+cd robot_ws
+colcon build --symlink-install
+source install/setup.bash
+```
+
+### 2. Launch the robot
+
+```bash
+# Base + arm + cameras
+./launch_mobile_manipulation.sh
+
+# Base only (before arm arrives)
+ros2 launch omnibot_bringup robot.launch.py
+
+# Xbox controller teleoperation
+ros2 launch omnibot_bringup joy_teleop.launch.py
+```
+
+### 3. Connect the Android app
+
+```bash
+./launch_rosbridge.sh
+# Open app → Settings → enter robot IP
+```
+
+### 4. Record teleoperation episodes
+
+```bash
+ros2 launch omnibot_lerobot teleop_record.launch.py \
+    output_dir:=/data/episodes \
+    task_name:="pick up the red cube"
+# Xbox RB = start/stop recording | LB = discard episode
+```
+
+### 5. Convert and train
+
+```bash
+# ROS bags → LeRobot v2.0 dataset
+python -m data_engine.scripts.ingest_dataset \
+    --input-dir /data/episodes \
+    --output-dir /data/lerobot/pick_place \
+    --task "pick up the red cube"
+
+# Fine-tune SmolVLA
+python lerobot_engine/train.py \
+    --dataset-path /data/lerobot/pick_place \
+    --output-dir /data/checkpoints/smolvla_v1
+```
+
+### 6. Run inference
+
+```bash
+ros2 launch omnibot_lerobot smolvla_inference.launch.py
+ros2 topic pub /smolvla/enable std_msgs/Bool "data: true" --once
+```
+
+---
+
+## Architecture
 
 ```
-Android App
-  │
-  │  (ROSBridge / gRPC)
+Xbox controller + SO-101 leader arm
+  │  (teleoperation)
   ▼
-Robot Runtime (ROS 2)
-  ├── Control & Kinematics
-  ├── Sensors & SLAM
-  ├── Data Logging Hooks
-  ▼
-Data Engine
-  ├── Episode-based datasets
-  ├── Sensor + action alignment
-  ▼
-VLA Engine
-  ├── Fine-tuning
-  ├── Inference (policy server)
-  └── Edge deployment
+teleop_recorder_node  ──→  ROS 2 bags
+                                │
+                    bag_to_omnibot.py
+                                │
+                    LeRobot v2.0 dataset
+                    (Parquet + MP4 video)
+                                │
+                      lerobot_engine/train.py
+                                │
+                    SmolVLA checkpoint
+                                │
+                       smolvla_node.py
+                       /arm/joint_commands
+                       /cmd_vel
+                      ↙           ↘
+              SO-101 arm      Mecanum base
 ```
+
+**Unified 9D action space:**
+```
+[shoulder_pan, shoulder_lift, elbow_flex, wrist_flex, wrist_roll, gripper,
+ base_vx, base_vy, base_vz]
+```
+
+### ROS 2 Packages
+
+| Package | Role |
+|---------|------|
+| `omnibot_bringup` | Launch files |
+| `omnibot_driver` | Yahboom serial driver, odometry, mecanum kinematics |
+| `omnibot_arm` | SO-101 arm driver (FeetechMotorsBus, 100 Hz) |
+| `omnibot_lerobot` | SmolVLA inference node + teleop recorder |
+| `omnibot_navigation` | SLAM, Nav2 (holonomic config) |
+| `omnibot_description` | URDF / xacro |
+| `omnibot_vla` | Legacy OpenVLA node |
+
+---
+
+## Simulation
+
+```bash
+./launch_simulation.sh
+# Gazebo Harmonic + RViz, bridges /cmd_vel /odom /tf
+```
+
+---
+
+## Training Guide
+
+See **[data_engine/TRAINING_GUIDE.md](data_engine/TRAINING_GUIDE.md)** for:
+- Camera mounting recommendations
+- Recording best practices (50+ episodes, vary object position)
+- Full dataset conversion pipeline
+- SmolVLA fine-tuning on local GPU or cloud (Colab / RunPod)
+- Iterative improvement loop
 
 ---
 
 ## Repository Structure
 
 ```
-mecanum-vla-robot/
-│
-├── robot_ws/                     # ROS 2 runtime workspace
-│   ├── src/
-│   │   ├── omnibot_driver/        # Motor drivers (STM32 / Yahboom)
-│   │   ├── omnibot_control/       # Controllers, planners
-│   │   ├── omnibot_slam/          # SLAM and localization
-│   │   ├── omnibot_navigation/    # Autonomous navigation system
-│   │   ├── omnibot_perception/    # Cameras, depth, sensors
-│   │   ├── omnibot_logging/       # Data hooks → Data Engine
-│   │   └── omnibot_bridge/        # ROS ↔ external interfaces
-│   └── launch/
-│
-├── data_engine/                  # Robot data collection & datasets
-│   ├── schema/                   # Episode and sensor schemas
-│   ├── collectors/               # rosbag → structured data
-│   ├── labeling/                 # Optional annotation tools
-│   ├── storage/                  # Parquet / video / numpy
-│   └── tools/
-│
-├── vla_engine/                   # Vision–Language–Action stack
-│   ├── models/                   # OpenVLA + adapters
-│   ├── training/                 # Fine-tuning pipelines
-│   ├── inference/                # Policy server / runtime
-│   ├── deployment/               # ONNX / TensorRT / edge
-│   └── benchmarks/
-│
-├── android_app/                  # Android monitoring & control app
-│   ├── app/
-│   ├── telemetry/
-│   ├── voice/
-│   └── slam_view/
-│
-├── infra/                        # DevOps & tooling
-│   ├── docker/
-│   ├── devcontainers/
-│   └── ci/
-│
-├── docs/                         # System documentation
-│   ├── architecture.md
-│   ├── data_format.md
-│   ├── inference_pipeline.md
-│   └── android_protocol.md
-│
-└── README.md
+├── robot_ws/src/
+│   ├── omnibot_driver/       # Motor control, odometry
+│   ├── omnibot_arm/          # SO-101 arm driver
+│   ├── omnibot_lerobot/      # SmolVLA inference + recorder
+│   ├── omnibot_navigation/   # SLAM + Nav2
+│   ├── omnibot_bringup/      # Launch files
+│   └── omnibot_description/  # URDF
+├── data_engine/              # ROS bag → LeRobot dataset pipeline
+├── lerobot_engine/           # SmolVLA train / infer scripts
+├── vla_engine/               # Legacy OpenVLA stack
+├── android_app/              # Kotlin MVVM controller app
+└── infra/                    # Docker, CI
 ```
 
 ---
 
-## Hardware Support
+## Roadmap
 
-### STM32 Microcontroller (Legacy)
-
-* Direct PWM-based motor control
-* External encoder feedback
-* Custom serial communication protocol
-* Requires firmware flashing
-
-### Yahboom ROS Robot Expansion Board (Primary)
-
-* Integrated motor drivers and encoders
-* USB-based communication
-* Simplified command protocol
-* Plug-and-play setup
-
----
-
-## Robot Runtime (ROS 2)
-
-The ROS 2 workspace (`robot_ws/`) is responsible for:
-
-* Low-level motor control
-* Kinematics and motion control
-* Sensor drivers (Kinect V2, Logitech Webcam)
-* Publishing robot state and telemetry
-* Logging synchronized data for learning
-
-### Supported ROS 2 Distributions
-
-* **Jazzy (Ubuntu 24.04)** - Recommended & Tested
-* Humble (Legacy, may require adjustments)
-
----
-
-## Data Engine
-
-The Data Engine enables **learning-ready dataset creation** from real robot operation.
-
-### Key Concepts
-
-* Episode-based logging (not raw rosbag only)
-* Time-synchronized sensor, state, and action streams
-* Explicit action representations for VLA training
-
-Example episode layout:
-
-```
-episode_00042/
-├── rgb_front.mp4
-├── depth_front.npy
-├── joint_states.parquet
-├── cmd_vel.parquet
-├── action_tokens.npy
-├── metadata.json
-```
-
----
-
-## VLA Engine
-
-The VLA Engine is a **standalone learning and inference stack**, decoupled from ROS.
-
-### Capabilities
-
-* Fine-tuning VLA models on collected robot data
-* Running inference via a policy server
-* Supporting edge (Jetson / ARM) and desktop GPUs
-* Benchmarking latency and throughput
-
-ROS nodes interact with the VLA engine as **clients**, not as embedded inference logic.
-
----
-
-## Android Application
-
-The Android app provides a human interface for the robot.
-
-### Features
-
-* Live camera and telemetry streaming
-* SLAM map visualization
-* Manual teleoperation
-* Voice command input (intent → robot action)
-
-### Responsibilities (by design)
-
-* UI and user interaction only
-* No robot logic or control policies embedded
-
----
-
-### User Interfaces
-*   **Xbox Controller**: Teleoperation via `joy_teleop` (See `docs/xbox_setup.md`).
-*   **OpenVLA (AI)**: Natural language control via `omnibot_vla` (See `docs/vla_distributed_setup.md`).
-
----
-
-## Installation (Robot Runtime)
-
-### Prerequisites
-
-* ROS 2 Jazzy (Ubuntu 24.04)
-* Python 3.10+
-* `pyserial`, `joy`, `teleop_twist_joy`
-
-```bash
-pip install pyserial
-sudo apt install ros-jazzy-joy ros-jazzy-teleop-twist-joy
-```
-
-### Build
-
-```bash
-cd robot_ws
-colcon build
-source install/setup.bash
-```
-
----
-
-## Usage
-
-### 1. Basic Robot (Yahboom Board)
-Launches the motor driver and robot state publisher.
-```bash
-ros2 launch omnibot_bringup robot.launch.py
-```
-
-### 2. Manual Control (Xbox)
-```bash
-ros2 launch omnibot_bringup joy_teleop.launch.py
-```
-
-### 3. AI Control (OpenVLA)
-Run this on your **Desktop PC**:
-```bash
-ros2 launch omnibot_vla vla_desktop.launch.py
-```
-Then send a prompt:
-```bash
-ros2 topic pub --once /vla/prompt std_msgs/msg/String "data: 'Find the red cup'"
-```
-
-### Autonomous Navigation (SLAM)
-
-1. **Launch autonomous robot with SLAM**:
-   ```bash
-   ros2 launch omnibot_navigation autonomous_robot.launch.py
-   ```
-
-2. **Launch with waypoint navigation**:
-   ```bash
-   ros2 launch omnibot_navigation autonomous_with_waypoints.launch.py
-   ```
-
-3. **Test autonomous operation**:
-   ```bash
-   ros2 run omnibot_navigation test_autonomous.py
-   ```
-
-**Required Hardware for Autonomous Operation:**
-- Xbox Kinect V2 (Depth/Pointcloud)
-- Logitech Webcam (RGB)
-- IMU sensor (e.g., MPU9250)
-- Raspberry Pi 5 8GB
-
-### Using STM32 (Legacy)
-
----
-
-## Design Goals
-
-* Clean separation of control, data, and learning
-* Reproducible robotics datasets
-* Hardware-agnostic inference
-* Scalable from teleop → autonomy
-* Suitable for research and production prototyping
+- [x] Mecanum base with working odometry
+- [x] ROS 2 Nav2 holonomic configuration
+- [x] Android app with ROSBridge
+- [x] SO-101 arm driver (simulation mode until arm arrives)
+- [x] SmolVLA unified 9D policy node
+- [x] LeRobot v2.0 dataset pipeline
+- [ ] First real arm teleoperation episode
+- [ ] First trained SmolVLA checkpoint
+- [ ] Demo video
+- [ ] HuggingFace dataset + model upload
 
 ---
 
 ## License
 
-MIT License
+MIT
 
 ---
 
 ## Acknowledgments
 
-* Yahboom for the ROS Robot Expansion Board
-* ROS 2 community
-* Open-source embodied AI research community
+- [HuggingFace LeRobot](https://github.com/huggingface/lerobot) — SmolVLA policy and SO-101 tooling
+- [Yahboom](https://www.yahboom.com) — ROS Robot Expansion Board
+- ROS 2 community
