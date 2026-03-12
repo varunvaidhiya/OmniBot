@@ -4,7 +4,7 @@ import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist, TransformStamped
 from nav_msgs.msg import Odometry
-from sensor_msgs.msg import Joy
+from sensor_msgs.msg import Joy, Imu
 from tf2_ros import TransformBroadcaster
 import serial
 import math
@@ -52,6 +52,15 @@ class YahboomControllerNode(Node):
         self.current_vy = 0.0
         self.current_vz = 0.0
         self.last_odom_time = time.time()
+
+        # IMU state from Yahboom board serial packets
+        # Packet types (RX): 0x61=accel, 0x62=gyro, 0x63=attitude (Euler)
+        # NOTE: packet type codes need hardware verification if data looks wrong.
+        self.imu_accel = [0.0, 0.0, 9.81]  # m/s² (z defaults to g at rest)
+        self.imu_gyro  = [0.0, 0.0, 0.0]   # rad/s
+        self.imu_roll  = 0.0                # rad
+        self.imu_pitch = 0.0                # rad
+        self.imu_yaw   = 0.0                # rad
         
         # Create publishers and subscribers
         self.cmd_vel_sub = self.create_subscription(
@@ -63,6 +72,7 @@ class YahboomControllerNode(Node):
         self.joy_sub = self.create_subscription(Joy, 'joy', self.joy_callback, 10)
         
         self.odom_pub = self.create_publisher(Odometry, 'odom', 10)
+        self.imu_pub  = self.create_publisher(Imu, 'imu/data', 10)
         self.tf_broadcaster = TransformBroadcaster(self)
         
         # Timer: 20Hz (0.05s)
@@ -201,9 +211,11 @@ class YahboomControllerNode(Node):
             # 1. Read Odom
             self.read_yahboom_odometry()
             
-            # 2. Publish Odom
-            self.publish_odometry(self.get_clock().now())
-            
+            # 2. Publish Odom + IMU
+            now = self.get_clock().now()
+            self.publish_odometry(now)
+            self.publish_imu(now)
+
             # 3. Send Motor Command (Throttled to 10Hz)
             self.send_motion_command()
             
@@ -248,10 +260,27 @@ class YahboomControllerNode(Node):
                 pkt_type = pkt[3]
                 payload = pkt[4:-1]  # between TYPE and CS
                 if pkt_type == 0x0C and len(payload) >= 6:
+                    # Velocity feedback: vx, vy (mm/s), vz (mrad/s)
                     vx_raw, vy_raw, vz_raw = struct.unpack_from('<hhh', payload, 0)
                     vx_ms   = vx_raw  / 1000.0
                     vy_ms   = vy_raw  / 1000.0
                     vz_rads = vz_raw  / 1000.0
+                elif pkt_type == 0x61 and len(payload) >= 6:
+                    # Accelerometer: 3×int16, unit = mg → m/s²
+                    ax, ay, az = struct.unpack_from('<hhh', payload, 0)
+                    self.imu_accel = [ax / 1000.0 * 9.81,
+                                      ay / 1000.0 * 9.81,
+                                      az / 1000.0 * 9.81]
+                elif pkt_type == 0x62 and len(payload) >= 6:
+                    # Gyroscope: 3×int16, unit = mrad/s → rad/s
+                    gx, gy, gz = struct.unpack_from('<hhh', payload, 0)
+                    self.imu_gyro = [gx / 1000.0, gy / 1000.0, gz / 1000.0]
+                elif pkt_type == 0x63 and len(payload) >= 6:
+                    # Attitude (Euler): 3×int16, unit = 0.01 deg → rad
+                    r, p, y = struct.unpack_from('<hhh', payload, 0)
+                    self.imu_roll  = r / 100.0 * math.pi / 180.0
+                    self.imu_pitch = p / 100.0 * math.pi / 180.0
+                    self.imu_yaw   = y / 100.0 * math.pi / 180.0
                 idx += total
 
             if vx_ms is None:
@@ -319,6 +348,40 @@ class YahboomControllerNode(Node):
             self.odom_pub.publish(odom)
         except Exception as e:
             self.get_logger().error(f'Pub Error: {e}')
+
+    def publish_imu(self, stamp):
+        try:
+            q = quaternion_from_euler(self.imu_roll, self.imu_pitch, self.imu_yaw)
+            msg = Imu()
+            msg.header.stamp = stamp.to_msg()
+            msg.header.frame_id = 'imu_link'
+
+            msg.orientation.x = q[0]
+            msg.orientation.y = q[1]
+            msg.orientation.z = q[2]
+            msg.orientation.w = q[3]
+            # Diagonal covariance (rad²)
+            msg.orientation_covariance[0] = 0.01
+            msg.orientation_covariance[4] = 0.01
+            msg.orientation_covariance[8] = 0.01
+
+            msg.angular_velocity.x = self.imu_gyro[0]
+            msg.angular_velocity.y = self.imu_gyro[1]
+            msg.angular_velocity.z = self.imu_gyro[2]
+            msg.angular_velocity_covariance[0] = 0.001
+            msg.angular_velocity_covariance[4] = 0.001
+            msg.angular_velocity_covariance[8] = 0.001
+
+            msg.linear_acceleration.x = self.imu_accel[0]
+            msg.linear_acceleration.y = self.imu_accel[1]
+            msg.linear_acceleration.z = self.imu_accel[2]
+            msg.linear_acceleration_covariance[0] = 0.1
+            msg.linear_acceleration_covariance[4] = 0.1
+            msg.linear_acceleration_covariance[8] = 0.1
+
+            self.imu_pub.publish(msg)
+        except Exception as e:
+            self.get_logger().error(f'IMU Pub Error: {e}')
 
 def main(args=None):
     rclpy.init(args=args)

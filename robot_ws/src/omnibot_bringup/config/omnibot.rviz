@@ -81,6 +81,23 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /model/mecanum_bot/odometry
       Value: false
+    - Class: rviz_default_plugins/Axes
+      Enabled: true
+      Length: 0.15
+      Name: IMU Axes
+      Radius: 0.01
+      Reference Frame: imu_link
+      Value: true
+    - Class: rviz_default_plugins/Image
+      Enabled: true
+      Name: Camera
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+        Value: /camera/image_raw
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48

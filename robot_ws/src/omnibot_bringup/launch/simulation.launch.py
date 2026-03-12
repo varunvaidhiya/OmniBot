@@ -15,6 +15,7 @@ def generate_launch_description():
     xacro_file = os.path.join(pkg_omnibot_description, 'urdf', 'omnibot.urdf.xacro')
     rviz_config_path = os.path.join(pkg_omnibot_bringup, 'config', 'omnibot.rviz')
     bridge_config = os.path.join(pkg_omnibot_bringup, 'config', 'ros_gz_bridge.yaml')
+    world_file = os.path.join(pkg_omnibot_bringup, 'worlds', 'omnibot_world.sdf')
 
     robot_desc = ParameterValue(Command(['xacro ', xacro_file]), value_type=str)
 
@@ -23,7 +24,7 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(
             os.path.join(pkg_ros_gz_sim, 'launch', 'gz_sim.launch.py')
         ),
-        launch_arguments={'gz_args': '-r empty.sdf'}.items(),
+        launch_arguments={'gz_args': f'-r {world_file}'}.items(),
     )
 
     # 2. Robot State Publisher — must start before spawn
@@ -59,6 +60,9 @@ def generate_launch_description():
             '/cmd_vel@geometry_msgs/msg/Twist@gz.msgs.Twist',
             '/odom@nav_msgs/msg/Odometry@gz.msgs.Odometry',
             '/tf@tf2_msgs/msg/TFMessage@gz.msgs.Pose_V',
+            '/imu/data@sensor_msgs/msg/Imu[gz.msgs.IMU',
+            '/camera/image_raw@sensor_msgs/msg/Image[gz.msgs.Image',
+            '/camera/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo',
         ],
         output='screen'
     )
