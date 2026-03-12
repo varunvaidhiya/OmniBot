@@ -24,6 +24,9 @@ class YahboomControllerNode(Node):
         self.declare_parameter('wheel_separation_length', 0.165)
         self.declare_parameter('serial_port', '/dev/ttyUSB0')
         self.declare_parameter('baud_rate', 115200)
+        # Set to true to log every unknown RX packet type — use this to
+        # discover actual IMU packet codes sent by the Yahboom board.
+        self.declare_parameter('debug_serial', False)
         
         # Get parameters
         self.wheel_radius = self.get_parameter('wheel_radius').value
@@ -31,6 +34,7 @@ class YahboomControllerNode(Node):
         self.wheel_separation_length = self.get_parameter('wheel_separation_length').value
         self.port_name = self.get_parameter('serial_port').value
         self.baud_rate = self.get_parameter('baud_rate').value
+        self.debug_serial = self.get_parameter('debug_serial').value
         
         # Robot state
         self.x_pos = 0.0
@@ -281,6 +285,12 @@ class YahboomControllerNode(Node):
                     self.imu_roll  = r / 100.0 * math.pi / 180.0
                     self.imu_pitch = p / 100.0 * math.pi / 180.0
                     self.imu_yaw   = y / 100.0 * math.pi / 180.0
+                elif self.debug_serial:
+                    # Unknown packet — log so we can discover real IMU codes
+                    self.get_logger().info(
+                        f'[debug_serial] unknown pkt type=0x{pkt_type:02X} '
+                        f'payload={[hex(b) for b in payload]}'
+                    )
                 idx += total
 
             if vx_ms is None:

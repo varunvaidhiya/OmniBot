@@ -11,6 +11,16 @@ WORKSPACE="${SCRIPT_DIR}/robot_ws"
 # ---- ROS Domain (must match all terminals) ----
 export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-30}"
 
+# ---- Cross-machine DDS peer discovery ----
+NETWORK_ENV="${SCRIPT_DIR}/network.env"
+if [[ -f "${NETWORK_ENV}" ]]; then
+    source "${NETWORK_ENV}"
+    export ROS_STATIC_PEERS="${WORKSTATION_IP};${PI_IP}"
+    echo "[INFO] DDS peers: ${ROS_STATIC_PEERS}"
+else
+    echo "[WARN] network.env not found — cross-machine discovery may fail."
+fi
+
 # ---- Source ROS 2 base ----
 ROS_DISTRO="${ROS_DISTRO:-jazzy}"
 ROS_SETUP="/opt/ros/${ROS_DISTRO}/setup.bash"
