@@ -11,12 +11,12 @@ Unified 9D action space: [shoulder_pan, shoulder_lift, elbow_flex,
                            base_vx, base_vy, base_vz]
 
 Topics subscribed:
-  /camera/wrist/image_raw  (sensor_msgs/Image)
-  /camera/front/image_raw  (sensor_msgs/Image)
-  /arm/joint_states        (sensor_msgs/JointState)
-  /odom                    (nav_msgs/Odometry)
-  /smolvla/task            (std_msgs/String)
-  /smolvla/enable          (std_msgs/Bool)
+  /camera/wrist/image_raw        (sensor_msgs/Image)
+  /camera/base/bev/image_raw     (sensor_msgs/Image)  — BEV mosaic from 4 base cameras
+  /arm/joint_states              (sensor_msgs/JointState)
+  /odom                          (nav_msgs/Odometry)
+  /smolvla/task                  (std_msgs/String)
+  /smolvla/enable                (std_msgs/Bool)
 
 Topics published:
   /arm/joint_commands  (sensor_msgs/JointState)
@@ -122,7 +122,7 @@ class SmolVLANode(Node):
         # ------------------------------------------------------------------
         self.enabled = False
         self.wrist_image = None   # numpy HxWx3 uint8
-        self.front_image = None   # numpy HxWx3 uint8
+        self.bev_image = None     # numpy HxWx3 uint8 — BEV mosaic from 4 base cameras
         self.arm_positions = np.zeros(6, dtype=np.float32)
         self.base_vel = np.zeros(3, dtype=np.float32)
 
@@ -168,7 +168,7 @@ class SmolVLANode(Node):
         self.create_subscription(
             Image, '/camera/wrist/image_raw', self.wrist_image_cb, 10)
         self.create_subscription(
-            Image, '/camera/front/image_raw', self.front_image_cb, 10)
+            Image, '/camera/base/bev/image_raw', self.bev_image_cb, 10)
         self.create_subscription(
             JointState, '/arm/joint_states', self.arm_state_cb, 10)
         self.create_subscription(
@@ -257,8 +257,8 @@ class SmolVLANode(Node):
     def wrist_image_cb(self, msg: Image):
         self.wrist_image = self._ros_image_to_numpy(msg)
 
-    def front_image_cb(self, msg: Image):
-        self.front_image = self._ros_image_to_numpy(msg)
+    def bev_image_cb(self, msg: Image):
+        self.bev_image = self._ros_image_to_numpy(msg)
 
     def arm_state_cb(self, msg: JointState):
         name_to_pos = dict(zip(msg.name, msg.position))
@@ -296,11 +296,11 @@ class SmolVLANode(Node):
         if not self.enabled:
             return
 
-        if self.wrist_image is None or self.front_image is None:
+        if self.wrist_image is None or self.bev_image is None:
             self.get_logger().warn(
                 'Waiting for camera images: '
                 f'wrist={"OK" if self.wrist_image is not None else "MISSING"}, '
-                f'front={"OK" if self.front_image is not None else "MISSING"}',
+                f'bev={"OK" if self.bev_image is not None else "MISSING"}',
                 throttle_duration_sec=2.0
             )
             return
@@ -308,7 +308,7 @@ class SmolVLANode(Node):
         try:
             # Build observation tensors
             wrist_t = self._numpy_to_tensor(self.wrist_image)
-            front_t = self._numpy_to_tensor(self.front_image)
+            bev_t = self._numpy_to_tensor(self.bev_image)
 
             state = np.concatenate([self.arm_positions, self.base_vel])  # (9,)
 
@@ -319,7 +319,7 @@ class SmolVLANode(Node):
 
             obs = {
                 'observation.images.wrist': wrist_t,
-                'observation.images.front': front_t,
+                'observation.images.bev': bev_t,   # BEV mosaic from 4 base cameras
                 'observation.state': state_t,
             }
 

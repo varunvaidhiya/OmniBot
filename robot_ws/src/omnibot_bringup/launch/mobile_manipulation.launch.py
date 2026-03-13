@@ -40,30 +40,43 @@ def generate_launch_description():
     )
 
     # ------------------------------------------------------------------
-    # 3. Front camera — /dev/video0
+    # Base cameras (4x OV9732, 100° FOV, MJPEG to stay within USB bandwidth)
+    # Device assignment (even-numbered video devices; odd are metadata):
+    #   front  → /dev/video0
+    #   rear   → /dev/video2
+    #   left   → /dev/video4
+    #   right  → /dev/video6
     # ------------------------------------------------------------------
-    front_camera_node = Node(
-        package='usb_cam',
-        executable='usb_cam_node_exe',
-        name='front_camera',
-        output='screen',
-        parameters=[{
-            'video_device': '/dev/video0',
-            'image_width': 640,
-            'image_height': 480,
-            'framerate': 30.0,
-            'pixel_format': 'yuyv',
-            'camera_name': 'front_camera',
-            'camera_frame_id': 'front_camera_link',
-        }],
-        remappings=[
-            ('image_raw', '/camera/front/image_raw'),
-            ('camera_info', '/camera/front/camera_info'),
-        ],
-    )
+
+    def _base_camera_node(name, device):
+        """Helper: create a usb_cam node for one base camera."""
+        return Node(
+            package='usb_cam',
+            executable='usb_cam_node_exe',
+            name=f'{name}_camera',
+            output='screen',
+            parameters=[{
+                'video_device': device,
+                'image_width': 640,
+                'image_height': 480,
+                'framerate': 30.0,
+                'pixel_format': 'mjpeg2rgb',   # MJPEG keeps USB bandwidth low
+                'camera_name': f'{name}_camera',
+                'camera_frame_id': f'{name}_camera_link',
+            }],
+            remappings=[
+                ('image_raw', f'/camera/{name}/image_raw'),
+                ('camera_info', f'/camera/{name}/camera_info'),
+            ],
+        )
+
+    front_camera_node = _base_camera_node('front', '/dev/video0')
+    rear_camera_node  = _base_camera_node('rear',  '/dev/video2')
+    left_camera_node  = _base_camera_node('left',  '/dev/video4')
+    right_camera_node = _base_camera_node('right', '/dev/video6')
 
     # ------------------------------------------------------------------
-    # 4. Wrist camera — /dev/video2
+    # 7. Wrist camera — /dev/video8  (arm end-effector)
     # ------------------------------------------------------------------
     wrist_camera_node = Node(
         package='usb_cam',
@@ -71,11 +84,11 @@ def generate_launch_description():
         name='wrist_camera',
         output='screen',
         parameters=[{
-            'video_device': '/dev/video2',
+            'video_device': '/dev/video8',
             'image_width': 640,
             'image_height': 480,
             'framerate': 30.0,
-            'pixel_format': 'yuyv',
+            'pixel_format': 'mjpeg2rgb',
             'camera_name': 'wrist_camera',
             'camera_frame_id': 'wrist_camera_link',
         }],
@@ -85,9 +98,31 @@ def generate_launch_description():
         ],
     )
 
+    # ------------------------------------------------------------------
+    # 8. BEV stitcher — combines 4 base cameras into one top-down image
+    # ------------------------------------------------------------------
+    bev_stitcher_node = Node(
+        package='omnibot_lerobot',
+        executable='bev_stitcher_node',
+        name='bev_stitcher_node',
+        output='screen',
+        parameters=[{
+            'canvas_size': 800,
+            'output_width': 800,
+            'output_height': 800,
+            'src_width': 640,
+            'src_height': 480,
+            'publish_hz': 30.0,
+        }],
+    )
+
     return LaunchDescription([
         robot_launch,
         arm_driver_delayed,
         front_camera_node,
+        rear_camera_node,
+        left_camera_node,
+        right_camera_node,
         wrist_camera_node,
+        bev_stitcher_node,
     ])

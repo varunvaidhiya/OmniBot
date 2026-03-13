@@ -13,12 +13,12 @@ State machine:
   SAVING    → writing episode to disk
 
 Topics subscribed:
-  /arm/leader_states      (sensor_msgs/JointState) - leader arm (arm actions)
-  /arm/joint_states       (sensor_msgs/JointState) - follower arm (arm observations)
-  /joy                    (sensor_msgs/Joy)         - Xbox controller
-  /camera/wrist/image_raw (sensor_msgs/Image)
-  /camera/front/image_raw (sensor_msgs/Image)
-  /odom                   (nav_msgs/Odometry)       - base velocity
+  /arm/leader_states           (sensor_msgs/JointState) - leader arm (arm actions)
+  /arm/joint_states            (sensor_msgs/JointState) - follower arm (arm observations)
+  /joy                         (sensor_msgs/Joy)         - Xbox controller
+  /camera/wrist/image_raw      (sensor_msgs/Image)
+  /camera/base/bev/image_raw   (sensor_msgs/Image)       - BEV mosaic from 4 base cameras
+  /odom                        (nav_msgs/Odometry)       - base velocity
 
 Unified 9D action:  [arm(6), base_vx, base_vy, base_vz]
 Unified 9D state:   [arm(6), base_vx, base_vy, base_vz]
@@ -118,7 +118,7 @@ class TeleopRecorderNode(Node):
         self.joy_buttons = [0] * 16
         self.prev_joy_buttons = [0] * 16
         self.wrist_image = None   # numpy HxWx3 uint8 RGB
-        self.front_image = None   # numpy HxWx3 uint8 RGB
+        self.bev_image = None     # numpy HxWx3 uint8 RGB — BEV mosaic from 4 base cameras
 
         # ------------------------------------------------------------------
         # cv_bridge
@@ -141,7 +141,7 @@ class TeleopRecorderNode(Node):
         self.create_subscription(
             Image, '/camera/wrist/image_raw', self.wrist_image_cb, 10)
         self.create_subscription(
-            Image, '/camera/front/image_raw', self.front_image_cb, 10)
+            Image, '/camera/base/bev/image_raw', self.bev_image_cb, 10)
         self.create_subscription(
             Odometry, '/odom', self.odom_cb, 10)
 
@@ -207,8 +207,8 @@ class TeleopRecorderNode(Node):
     def wrist_image_cb(self, msg: Image):
         self.wrist_image = self._ros_image_to_numpy_rgb(msg)
 
-    def front_image_cb(self, msg: Image):
-        self.front_image = self._ros_image_to_numpy_rgb(msg)
+    def bev_image_cb(self, msg: Image):
+        self.bev_image = self._ros_image_to_numpy_rgb(msg)
 
     # ------------------------------------------------------------------
     # Button handling
@@ -296,9 +296,9 @@ class TeleopRecorderNode(Node):
             if self.wrist_image is not None
             else np.zeros((240, 320, 3), dtype=np.uint8)
         )
-        front_img = (
-            self.front_image.copy()
-            if self.front_image is not None
+        bev_img = (
+            self.bev_image.copy()
+            if self.bev_image is not None
             else np.zeros((240, 320, 3), dtype=np.uint8)
         )
 
@@ -306,7 +306,7 @@ class TeleopRecorderNode(Node):
             'state': full_state.astype(np.float32),
             'action': full_action.astype(np.float32),
             'wrist_image': wrist_img,
-            'front_image': front_img,
+            'bev_image': bev_img,    # BEV mosaic from 4 base cameras
             'timestamp': time.time(),
         }
         self.episode_buffer.append(frame)
@@ -360,7 +360,7 @@ class TeleopRecorderNode(Node):
                 'shape': (3, 240, 320),
                 'names': ['channels', 'height', 'width'],
             },
-            'observation.images.front': {
+            'observation.images.bev': {
                 'dtype': 'video',
                 'shape': (3, 240, 320),
                 'names': ['channels', 'height', 'width'],
@@ -380,7 +380,7 @@ class TeleopRecorderNode(Node):
                 'observation.state': frame['state'],
                 'action': frame['action'],
                 'observation.images.wrist': frame['wrist_image'],
-                'observation.images.front': frame['front_image'],
+                'observation.images.bev': frame['bev_image'],
             })
 
         dataset.save_episode(task=self.task_description)
@@ -390,7 +390,7 @@ class TeleopRecorderNode(Node):
         states = np.stack([f['state'] for f in self.episode_buffer])
         actions = np.stack([f['action'] for f in self.episode_buffer])
         wrist_imgs = np.stack([f['wrist_image'] for f in self.episode_buffer])
-        front_imgs = np.stack([f['front_image'] for f in self.episode_buffer])
+        bev_imgs = np.stack([f['bev_image'] for f in self.episode_buffer])
         timestamps = np.array([f['timestamp'] for f in self.episode_buffer])
 
         ep_dir = os.path.join(self.output_dir, f'episode_{self.episode_index:05d}')
@@ -401,7 +401,7 @@ class TeleopRecorderNode(Node):
             states=states,
             actions=actions,
             wrist_images=wrist_imgs,
-            front_images=front_imgs,
+            bev_images=bev_imgs,
             timestamps=timestamps,
             joint_names=np.array(JOINT_NAMES),
             task=np.array([self.task_description]),
