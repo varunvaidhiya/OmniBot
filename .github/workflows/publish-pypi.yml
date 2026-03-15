@@ -1,0 +1,62 @@
+name: Publish Python packages to PyPI
+
+# Trigger on version tags for either Python package:
+#   vla-serve-v1.0.0
+#   robot-episode-dataset-v1.0.0
+on:
+  push:
+    tags:
+      - 'vla-serve-v[0-9]*'
+      - 'robot-episode-dataset-v[0-9]*'
+
+jobs:
+  build-and-publish:
+    name: Build and publish to PyPI
+    runs-on: ubuntu-latest
+
+    # The 'pypi' environment must exist in repo Settings → Environments
+    # and have a PyPI Trusted Publisher configured there.
+    environment: pypi
+
+    permissions:
+      id-token: write   # required for OIDC Trusted Publisher (no API token needed)
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # Determine which package directory to build from the tag name
+      - name: Resolve package directory
+        id: pkg
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if [[ "$TAG" == vla-serve-v* ]]; then
+            echo "dir=packages/vla_serve"    >> "$GITHUB_OUTPUT"
+            echo "name=vla-serve"            >> "$GITHUB_OUTPUT"
+          elif [[ "$TAG" == robot-episode-dataset-v* ]]; then
+            echo "dir=packages/robot_episode_dataset" >> "$GITHUB_OUTPUT"
+            echo "name=robot-episode-dataset"         >> "$GITHUB_OUTPUT"
+          else
+            echo "Unknown tag format: $TAG" >&2
+            exit 1
+          fi
+
+      - name: Install build frontend
+        run: pip install --upgrade build
+
+      - name: Build wheel and sdist
+        run: python -m build "${{ steps.pkg.outputs.dir }}"
+        # Produces dist/ inside the package directory
+
+      - name: Publish to PyPI (Trusted Publisher / OIDC)
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: ${{ steps.pkg.outputs.dir }}/dist/
+          # No password= needed when using Trusted Publisher
+          print-hash: true

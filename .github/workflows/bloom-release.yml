@@ -1,0 +1,93 @@
+name: ROS Index Release (bloom)
+
+# Trigger on version tags for any ROS 2 package:
+#   yahboom_ros2-v1.0.0
+#   mecanum_drive_ros2-v1.0.0
+#   ros2_bev_stitcher-v1.0.0
+on:
+  push:
+    tags:
+      - 'yahboom_ros2-v[0-9]*'
+      - 'mecanum_drive_ros2-v[0-9]*'
+      - 'ros2_bev_stitcher-v[0-9]*'
+
+jobs:
+  bloom-release:
+    name: Prepare bloom release
+    runs-on: ubuntu-24.04
+
+    # ── Required secrets ───────────────────────────────────────────────────
+    # BLOOM_GITHUB_TOKEN : a GitHub PAT (repo + workflow scopes) used by bloom
+    #                      to push the release branch and open a rosdistro PR.
+    #                      Create at Settings → Secrets → Actions.
+    # ──────────────────────────────────────────────────────────────────────
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # bloom needs full history
+
+      - name: Set up ROS 2 Jazzy + bloom
+        uses: ros-tooling/setup-ros@v0.7
+        with:
+          required-ros-distributions: jazzy
+
+      - name: Install bloom and rosdep
+        run: |
+          sudo apt-get install -y python3-bloom python3-rosdep catkin-pkg
+          sudo rosdep init || true
+          rosdep update
+
+      # Determine which package triggered the tag and where it lives
+      - name: Resolve package
+        id: pkg
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          PKG=$(echo "$TAG" | sed 's/-v.*//')
+          VERSION=$(echo "$TAG" | sed 's/.*-v//')
+          echo "name=$PKG"                       >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION"                >> "$GITHUB_OUTPUT"
+          echo "dir=packages/$PKG"               >> "$GITHUB_OUTPUT"
+
+      # bloom-release needs the package to be at the repo root, so we
+      # create a temporary orphan branch containing only the package subtree.
+      - name: Create release branch with package at root
+        run: |
+          PKG="${{ steps.pkg.outputs.name }}"
+          VERSION="${{ steps.pkg.outputs.version }}"
+          DIR="${{ steps.pkg.outputs.dir }}"
+
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name  "github-actions[bot]"
+
+          # Create an orphan branch with only the package contents at root
+          git subtree split --prefix="$DIR" -b "release/${PKG}-${VERSION}"
+          git checkout "release/${PKG}-${VERSION}"
+
+          # Tag this split branch for bloom to find
+          git tag "${PKG}-${VERSION}"
+
+      - name: Run bloom-release
+        env:
+          BLOOM_GITHUB_TOKEN: ${{ secrets.BLOOM_GITHUB_TOKEN }}
+          ROSDISTRO_INDEX_URL: https://raw.githubusercontent.com/ros/rosdistro/master/index-v4.yaml
+        run: |
+          PKG="${{ steps.pkg.outputs.name }}"
+          VERSION="${{ steps.pkg.outputs.version }}"
+
+          # bloom-release will:
+          #   1. Read package.xml + CHANGELOG.rst
+          #   2. Create debian/ and release branch in this repo
+          #   3. Open a PR against ros/rosdistro automatically
+          bloom-release "$PKG" \
+            --rosdistro jazzy \
+            --track jazzy \
+            --version "$VERSION" \
+            --no-pull-request    # remove this flag once rosdistro PR flow is tested
+
+      - name: Summary
+        run: |
+          echo "### bloom-release complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "Package: ${{ steps.pkg.outputs.name }} v${{ steps.pkg.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Next step: open a PR to ros/rosdistro adding the package to jazzy/distribution.yaml" >> "$GITHUB_STEP_SUMMARY"
