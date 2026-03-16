@@ -30,6 +30,13 @@
   <depend>sensor_msgs</depend>
   <depend>nav_msgs</depend>
 
+  <!-- 3-D mapping stack -->
+  <depend>rtabmap_ros</depend>
+  <depend>octomap_server</depend>
+  <depend>pcl_ros</depend>
+  <depend>depth_image_proc</depend>
+  <depend>octomap_msgs</depend>
+
   <!-- <test_depend>ament_lint_auto</test_depend> -->
   <!-- <test_depend>ament_lint_common</test_depend> -->
 

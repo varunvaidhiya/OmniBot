@@ -244,6 +244,89 @@
         </sensor>
     </gazebo>
 
+    <!-- ================================================================
+         Intel RealSense D435 Depth Camera
+         Mounted at the front-centre of the chassis, facing forward.
+         Used for 3-D mapping (RTAB-Map) and obstacle avoidance.
+         D435 specs: depth FOV 69°H × 42°V, range 0.1 – 10 m
+         RGB FOV: ~69°H × 42°V
+         ================================================================ -->
+    <xacro:property name="depth_cam_x"  value="${chassis_length / 2.0 - 0.005}"/>
+    <xacro:property name="depth_cam_z"  value="${chassis_height / 2.0 + 0.015}"/>
+    <xacro:property name="depth_cam_mass" value="0.072"/>
+
+    <!-- Optical frame (Z forward, X right, Y down) -->
+    <link name="depth_camera_link">
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <geometry>
+                <box size="0.090 0.025 0.025"/>
+            </geometry>
+            <material name="realsense_grey">
+                <color rgba="0.15 0.15 0.15 1"/>
+            </material>
+        </visual>
+        <collision>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <geometry>
+                <box size="0.090 0.025 0.025"/>
+            </geometry>
+        </collision>
+        <inertial>
+            <mass value="${depth_cam_mass}"/>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <inertia
+                ixx="${depth_cam_mass / 12.0 * (0.025*0.025 + 0.025*0.025)}"
+                ixy="0" ixz="0"
+                iyy="${depth_cam_mass / 12.0 * (0.090*0.090 + 0.025*0.025)}"
+                iyz="0"
+                izz="${depth_cam_mass / 12.0 * (0.090*0.090 + 0.025*0.025)}"/>
+        </inertial>
+    </link>
+
+    <joint name="depth_camera_joint" type="fixed">
+        <parent link="base_link"/>
+        <child link="depth_camera_link"/>
+        <origin xyz="${depth_cam_x} 0 ${depth_cam_z}" rpy="0 0 0"/>
+    </joint>
+
+    <!-- Optical frame: rotate 90° so Z points forward in ROS convention -->
+    <link name="depth_camera_optical_frame"/>
+    <joint name="depth_camera_optical_joint" type="fixed">
+        <parent link="depth_camera_link"/>
+        <child link="depth_camera_optical_frame"/>
+        <origin xyz="0 0 0" rpy="${-PI/2} 0 ${-PI/2}"/>
+    </joint>
+
+    <!-- Gazebo Harmonic RGBD sensor (models D435 RGB-D) -->
+    <gazebo reference="depth_camera_link">
+        <sensor name="depth_camera_sensor" type="rgbd_camera">
+            <always_on>1</always_on>
+            <update_rate>15</update_rate>
+            <visualize>false</visualize>
+            <topic>/camera/depth</topic>
+            <gz_frame_id>depth_camera_link</gz_frame_id>
+            <camera>
+                <!-- D435 depth horizontal FOV ~69° = 1.2043 rad -->
+                <horizontal_fov>1.2043</horizontal_fov>
+                <image>
+                    <width>640</width>
+                    <height>480</height>
+                    <format>R_FLOAT32</format>
+                </image>
+                <clip>
+                    <near>0.1</near>
+                    <far>10.0</far>
+                </clip>
+                <noise>
+                    <type>gaussian</type>
+                    <mean>0.0</mean>
+                    <stddev>0.01</stddev>
+                </noise>
+            </camera>
+        </sensor>
+    </gazebo>
+
     <!-- IMU Link — represents the Yahboom board's built-in MPU9250 (9-axis IMU) -->
     <link name="imu_link">
         <visual>

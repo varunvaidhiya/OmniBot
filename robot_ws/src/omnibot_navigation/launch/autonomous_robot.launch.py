@@ -25,6 +25,7 @@ def generate_launch_description():
     use_lifecycle_mgr = LaunchConfiguration('use_lifecycle_mgr')
     use_remappings = LaunchConfiguration('use_remappings')
     use_slam = LaunchConfiguration('use_slam')
+    use_3d_mapping = LaunchConfiguration('use_3d_mapping')
     use_rviz = LaunchConfiguration('use_rviz')
     rviz_config_file = LaunchConfiguration('rviz_config_file')
     
@@ -63,6 +64,11 @@ def generate_launch_description():
         'use_slam',
         default_value='true',
         description='Whether to use SLAM for mapping')
+
+    declare_use_3d_mapping_cmd = DeclareLaunchArgument(
+        'use_3d_mapping',
+        default_value='false',
+        description='Launch RTAB-Map + OctoMap 3-D mapping (requires depth camera)')
     
     declare_use_rviz_cmd = DeclareLaunchArgument(
         'use_rviz',
@@ -84,6 +90,13 @@ def generate_launch_description():
     robot_description = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(omnibot_description_dir, 'launch', 'display.launch.py')),
+        launch_arguments={'use_sim_time': use_sim_time}.items())
+
+    # Include RTAB-Map 3-D mapping (conditional)
+    rtabmap_3d = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(bringup_dir, 'launch', 'rtabmap.launch.py')),
+        condition=IfCondition(use_3d_mapping),
         launch_arguments={'use_sim_time': use_sim_time}.items())
 
     # Include SLAM toolbox
@@ -134,6 +147,7 @@ def generate_launch_description():
     ld.add_action(declare_use_lifecycle_mgr_cmd)
     ld.add_action(declare_use_remappings_cmd)
     ld.add_action(declare_use_slam_cmd)
+    ld.add_action(declare_use_3d_mapping_cmd)
     ld.add_action(declare_use_rviz_cmd)
     ld.add_action(declare_rviz_config_file_cmd)
 
@@ -142,6 +156,7 @@ def generate_launch_description():
     ld.add_action(robot_description)
     ld.add_action(robot_localization_node)
     ld.add_action(slam_toolbox)
+    ld.add_action(rtabmap_3d)
     ld.add_action(autonomous_navigation)
     ld.add_action(rviz_node)
 
