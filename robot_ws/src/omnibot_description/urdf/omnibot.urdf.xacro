@@ -185,9 +185,8 @@
     </joint>
 
     <!-- ================================================================
-         OV9732 wide-angle cameras — one on each side face of the chassis.
-         Mounted flush with the side faces of the bottom plate inside a
-         camera case. Each camera faces straight outward (no tilt).
+         OV9732 wide-angle cameras — one near each edge of the bottom plate,
+         sitting flat on its top surface. Each camera faces outward horizontally.
          FOV: 100° (1.745 rad), 1280×720, USB UVC.
          ================================================================ -->
     <xacro:macro name="base_camera" params="prefix x_pos y_pos yaw_angle">
@@ -219,12 +218,12 @@
             </inertial>
         </link>
 
-        <!-- Parent: base_link (bottom plate). Cameras sit on the side faces, facing straight out. -->
+        <!-- Cameras sit on top surface of base_link, near each edge, facing outward. -->
         <joint name="${prefix}_camera_joint" type="fixed">
             <parent link="base_link"/>
             <child link="${prefix}_camera_link"/>
-            <origin xyz="${x_pos} ${y_pos} 0"
-                    rpy="0 ${PI/2} ${yaw_angle}"/>
+            <origin xyz="${x_pos} ${y_pos} ${plate_thickness / 2.0 + camera_size_z / 2.0}"
+                    rpy="0 0 ${yaw_angle}"/>
         </joint>
 
         <gazebo reference="${prefix}_camera_link">
@@ -250,25 +249,25 @@
         </gazebo>
     </xacro:macro>
 
-    <!-- Cameras on the 4 side faces of the top plate -->
+    <!-- Cameras on top of the base plate, near each edge, facing outward -->
     <xacro:base_camera prefix="front"
-        x_pos="${chassis_length / 2.0 + camera_size_x / 2.0}"
+        x_pos="${chassis_length / 2.0 - camera_size_x / 2.0}"
         y_pos="0"
         yaw_angle="0"/>
 
     <xacro:base_camera prefix="rear"
-        x_pos="${-(chassis_length / 2.0 + camera_size_x / 2.0)}"
+        x_pos="${-(chassis_length / 2.0 - camera_size_x / 2.0)}"
         y_pos="0"
         yaw_angle="${PI}"/>
 
     <xacro:base_camera prefix="left"
         x_pos="0"
-        y_pos="${chassis_width / 2.0 + camera_size_x / 2.0}"
+        y_pos="${chassis_width / 2.0 - camera_size_x / 2.0}"
         yaw_angle="${PI/2}"/>
 
     <xacro:base_camera prefix="right"
         x_pos="0"
-        y_pos="${-(chassis_width / 2.0 + camera_size_x / 2.0)}"
+        y_pos="${-(chassis_width / 2.0 - camera_size_x / 2.0)}"
         yaw_angle="${-PI/2}"/>
 
     <!-- ================================================================
