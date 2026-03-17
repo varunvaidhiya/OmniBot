@@ -224,7 +224,7 @@
             <parent link="base_link"/>
             <child link="${prefix}_camera_link"/>
             <origin xyz="${x_pos} ${y_pos} 0"
-                    rpy="0 0 ${yaw_angle}"/>
+                    rpy="0 ${PI/2} ${yaw_angle}"/>
         </joint>
 
         <gazebo reference="${prefix}_camera_link">
