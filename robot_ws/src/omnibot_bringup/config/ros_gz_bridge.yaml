@@ -37,3 +37,42 @@
   ros_type_name: "sensor_msgs/msg/CameraInfo"
   gz_type_name: "gz.msgs.CameraInfo"
   direction: GZ_TO_ROS
+
+# ── Orbbec Astra Pro depth camera (Gazebo RGBD sensor) ────────────────────────
+# Topic names on the ROS side are chosen to match ros2_astra_camera driver
+# output exactly, so rtabmap.launch.py remappings work identically in
+# simulation and on the physical robot.
+
+# Depth image (Gazebo publishes as /camera/depth/image; bridge renames to
+# /camera/depth/image_raw to match the Astra Pro driver convention)
+- ros_topic_name: "/camera/depth/image_raw"
+  gz_topic_name: "/camera/depth/image"
+  ros_type_name: "sensor_msgs/msg/Image"
+  gz_type_name: "gz.msgs.Image"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/camera/depth/camera_info"
+  gz_topic_name: "/camera/depth/camera_info"
+  ros_type_name: "sensor_msgs/msg/CameraInfo"
+  gz_type_name: "gz.msgs.CameraInfo"
+  direction: GZ_TO_ROS
+
+# RGB image from RGBD sensor (Gazebo publishes colour as /camera/depth/image_rgb8)
+- ros_topic_name: "/camera/color/image_raw"
+  gz_topic_name: "/camera/depth/image_rgb8"
+  ros_type_name: "sensor_msgs/msg/Image"
+  gz_type_name: "gz.msgs.Image"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/camera/color/camera_info"
+  gz_topic_name: "/camera/depth/camera_info"
+  ros_type_name: "sensor_msgs/msg/CameraInfo"
+  gz_type_name: "gz.msgs.CameraInfo"
+  direction: GZ_TO_ROS
+
+# Per-frame PointCloud2 for Nav2 VoxelLayer / ObstacleLayer
+- ros_topic_name: "/camera/depth/points"
+  gz_topic_name: "/camera/depth/points"
+  ros_type_name: "sensor_msgs/msg/PointCloud2"
+  gz_type_name: "gz.msgs.PointCloudPacked"
+  direction: GZ_TO_ROS

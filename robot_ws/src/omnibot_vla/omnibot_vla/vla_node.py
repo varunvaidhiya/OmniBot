@@ -58,7 +58,10 @@ class VLANode(Node):
         
         self.create_subscription(Image, '/image_raw', self.image_callback, 10)
         self.create_subscription(String, '/vla/prompt', self.prompt_callback, 10)
-        self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
+        # Publish to /cmd_vel/vla so the cmd_vel_mux can select it when in
+        # 'vla' mode.  The mux forwards the selected source to /cmd_vel/out,
+        # which the robot driver reads.
+        self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel/vla', 10)
         
         # Processing Timer
         self.create_timer(1.0, self.inference_loop) # Run inference at 1Hz (adjust based on performance)
