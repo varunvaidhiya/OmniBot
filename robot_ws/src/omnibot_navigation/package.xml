@@ -34,8 +34,12 @@
   <depend>rtabmap_ros</depend>
   <depend>octomap_server</depend>
   <depend>pcl_ros</depend>
-  <depend>depth_image_proc</depend>
   <depend>octomap_msgs</depend>
+  <!-- Orbbec Astra Pro driver — build from source (not on apt):
+       https://github.com/orbbec/ros2_astra_camera
+       cd robot_ws/src && git clone https://github.com/orbbec/ros2_astra_camera
+       colcon build - -packages-select astra_camera -->
+  <exec_depend>astra_camera</exec_depend>
 
   <!-- <test_depend>ament_lint_auto</test_depend> -->
   <!-- <test_depend>ament_lint_common</test_depend> -->

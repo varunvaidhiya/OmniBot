@@ -200,10 +200,10 @@ local_costmap:
           clearing: True
           marking: True
           data_type: "PointCloud2"
-          raytrace_max_range: 5.0
-          raytrace_min_range: 0.0
-          obstacle_max_range: 4.5
-          obstacle_min_range: 0.0
+          raytrace_max_range: 8.0
+          raytrace_min_range: 0.6
+          obstacle_max_range: 7.5
+          obstacle_min_range: 0.6
           inf_is_valid: false
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
@@ -241,10 +241,10 @@ global_costmap:
           clearing: True
           marking: True
           data_type: "PointCloud2"
-          raytrace_max_range: 5.0
-          raytrace_min_range: 0.0
-          obstacle_max_range: 4.5
-          obstacle_min_range: 0.0
+          raytrace_max_range: 8.0
+          raytrace_min_range: 0.6
+          obstacle_max_range: 7.5
+          obstacle_min_range: 0.6
           inf_is_valid: false
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"

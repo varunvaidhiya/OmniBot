@@ -1,15 +1,23 @@
 ###############################################################################
-# RTAB-Map parameters for OmniBot 3-D mapping with Intel RealSense D435
+# RTAB-Map parameters for OmniBot 3-D mapping with Orbbec Astra Pro
 #
 # RTAB-Map performs RGB-D SLAM:
-#   - Loop-closure detection via visual bag-of-words
+#   - Loop-closure detection via visual bag-of-words on RGB frames
 #   - 3-D occupancy grid (OctoMap) for Nav2 VoxelLayer
 #   - Optimised graph-based pose estimation
 #
+# Astra Pro topic layout (ros2_astra_camera driver):
+#   /camera/color/image_raw   — RGB 1280×960
+#   /camera/color/camera_info
+#   /camera/depth/image_raw   — 16-bit depth (mm), 640×480
+#   /camera/depth/camera_info
+#   /camera/depth/points      — PointCloud2 (unregistered)
+#
 # Topic remappings (applied in rtabmap.launch.py):
-#   rgb/image          ← /camera/depth/image (R_FLOAT32 depth from Gazebo)
-#   rgb/camera_info    ← /camera/depth/camera_info
-#   depth/image        ← /camera/depth/image
+#   rgb/image          ← /camera/color/image_raw
+#   rgb/camera_info    ← /camera/color/camera_info
+#   depth/image        ← /camera/depth/image_raw
+#   depth/camera_info  ← /camera/depth/camera_info
 #   odom               ← /odom
 ###############################################################################
 
@@ -47,8 +55,8 @@ rtabmap:
     # ── 3-D occupancy grid (feeds Nav2 VoxelLayer + OctoMap) ─────────────────
     Grid/3D: "true"
     Grid/CellSize: "0.05"          # 5 cm voxel resolution
-    Grid/RangeMax: "5.0"           # max mapping range from sensor
-    Grid/RangeMin: "0.1"
+    Grid/RangeMax: "8.0"           # Astra Pro max range
+    Grid/RangeMin: "0.6"           # Astra Pro min range (blind zone below)
     Grid/NormalsSegmentation: "false"
     Grid/MaxObstacleHeight: "2.0"
     Grid/MinGroundHeight: "-0.1"

@@ -29,7 +29,7 @@ octomap_server:
     cloud_in: /rtabmap/cloud_map
 
     # ── Sensor model ─────────────────────────────────────────────────────────
-    sensor_model_max_range: 5.0    # discard points farther than this (m)
+    sensor_model_max_range: 8.0    # Astra Pro max range (m)
     sensor_model_hit: 0.7
     sensor_model_miss: 0.4
     sensor_model_min: 0.12

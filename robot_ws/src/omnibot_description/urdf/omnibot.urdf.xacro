@@ -245,52 +245,58 @@
     </gazebo>
 
     <!-- ================================================================
-         Intel RealSense D435 Depth Camera
-         Mounted at the front-centre of the chassis, facing forward.
-         Used for 3-D mapping (RTAB-Map) and obstacle avoidance.
-         D435 specs: depth FOV 69°H × 42°V, range 0.1 – 10 m
-         RGB FOV: ~69°H × 42°V
+         Orbbec Astra Pro Depth Camera
+         Mounted at the front-centre of the chassis, facing forward,
+         tilted 12° downward to ensure ground obstacles within 0.6 m
+         blind zone are captured on the sides by the OV9732 cameras.
+         Astra Pro specs:
+           Depth: 640×480 @ 30 fps, FOV 60°H × 49.5°V, range 0.6–8.0 m
+           RGB  : 1280×960 @ 30 fps, FOV 60°H × 49.5°V
+           Body : 165 mm × 30 mm × 40 mm, 300 g, USB 2.0
+         ROS 2 driver: https://github.com/orbbec/ros2_astra_camera
          ================================================================ -->
-    <xacro:property name="depth_cam_x"  value="${chassis_length / 2.0 - 0.005}"/>
-    <xacro:property name="depth_cam_z"  value="${chassis_height / 2.0 + 0.015}"/>
-    <xacro:property name="depth_cam_mass" value="0.072"/>
+    <xacro:property name="astra_x"    value="${chassis_length / 2.0 - 0.005}"/>
+    <xacro:property name="astra_z"    value="${chassis_height / 2.0 + 0.020}"/>
+    <xacro:property name="astra_mass" value="0.300"/>
 
-    <!-- Optical frame (Z forward, X right, Y down) -->
     <link name="depth_camera_link">
         <visual>
             <origin xyz="0 0 0" rpy="0 0 0"/>
             <geometry>
-                <box size="0.090 0.025 0.025"/>
+                <!-- Astra Pro body: 165 mm wide × 30 mm deep × 40 mm tall -->
+                <box size="0.030 0.165 0.040"/>
             </geometry>
-            <material name="realsense_grey">
-                <color rgba="0.15 0.15 0.15 1"/>
+            <material name="astra_black">
+                <color rgba="0.08 0.08 0.08 1"/>
             </material>
         </visual>
         <collision>
             <origin xyz="0 0 0" rpy="0 0 0"/>
             <geometry>
-                <box size="0.090 0.025 0.025"/>
+                <box size="0.030 0.165 0.040"/>
             </geometry>
         </collision>
         <inertial>
-            <mass value="${depth_cam_mass}"/>
+            <mass value="${astra_mass}"/>
             <origin xyz="0 0 0" rpy="0 0 0"/>
             <inertia
-                ixx="${depth_cam_mass / 12.0 * (0.025*0.025 + 0.025*0.025)}"
+                ixx="${astra_mass / 12.0 * (0.165*0.165 + 0.040*0.040)}"
                 ixy="0" ixz="0"
-                iyy="${depth_cam_mass / 12.0 * (0.090*0.090 + 0.025*0.025)}"
+                iyy="${astra_mass / 12.0 * (0.030*0.030 + 0.040*0.040)}"
                 iyz="0"
-                izz="${depth_cam_mass / 12.0 * (0.090*0.090 + 0.025*0.025)}"/>
+                izz="${astra_mass / 12.0 * (0.030*0.030 + 0.165*0.165)}"/>
         </inertial>
     </link>
 
+    <!-- Tilt 12° downward (pitch = -0.2094 rad) so the camera sees ground
+         obstacles starting at ~2.8 m while still covering the full scene -->
     <joint name="depth_camera_joint" type="fixed">
         <parent link="base_link"/>
         <child link="depth_camera_link"/>
-        <origin xyz="${depth_cam_x} 0 ${depth_cam_z}" rpy="0 0 0"/>
+        <origin xyz="${astra_x} 0 ${astra_z}" rpy="0 -0.2094 0"/>
     </joint>
 
-    <!-- Optical frame: rotate 90° so Z points forward in ROS convention -->
+    <!-- Optical frame: Z forward, X right, Y down (ROS convention) -->
     <link name="depth_camera_optical_frame"/>
     <joint name="depth_camera_optical_joint" type="fixed">
         <parent link="depth_camera_link"/>
@@ -298,30 +304,39 @@
         <origin xyz="0 0 0" rpy="${-PI/2} 0 ${-PI/2}"/>
     </joint>
 
-    <!-- Gazebo Harmonic RGBD sensor (models D435 RGB-D) -->
+    <!-- Gazebo Harmonic RGBD sensor (models Astra Pro RGB-D)
+         Publishes:
+           /camera/depth/image      — 16-bit depth (mm)  → bridged as image_raw
+           /camera/depth/points     — PointCloud2
+           /camera/color/image_raw  — RGB 640×480
+         These topic names are chosen to match the real ros2_astra_camera driver
+         output so that rtabmap.launch.py remappings work identically in
+         simulation and on the physical robot. -->
     <gazebo reference="depth_camera_link">
-        <sensor name="depth_camera_sensor" type="rgbd_camera">
+        <sensor name="astra_pro_sensor" type="rgbd_camera">
             <always_on>1</always_on>
-            <update_rate>15</update_rate>
+            <update_rate>30</update_rate>
             <visualize>false</visualize>
+            <!-- Base topic; Gazebo appends /image, /points, /camera_info -->
             <topic>/camera/depth</topic>
-            <gz_frame_id>depth_camera_link</gz_frame_id>
+            <gz_frame_id>depth_camera_optical_frame</gz_frame_id>
             <camera>
-                <!-- D435 depth horizontal FOV ~69° = 1.2043 rad -->
-                <horizontal_fov>1.2043</horizontal_fov>
+                <!-- Astra Pro horizontal FOV 60° = 1.0472 rad -->
+                <horizontal_fov>1.0472</horizontal_fov>
                 <image>
                     <width>640</width>
                     <height>480</height>
                     <format>R_FLOAT32</format>
                 </image>
                 <clip>
-                    <near>0.1</near>
-                    <far>10.0</far>
+                    <!-- Astra Pro minimum range 0.6 m -->
+                    <near>0.6</near>
+                    <far>8.0</far>
                 </clip>
                 <noise>
                     <type>gaussian</type>
                     <mean>0.0</mean>
-                    <stddev>0.01</stddev>
+                    <stddev>0.005</stddev>
                 </noise>
             </camera>
         </sensor>
