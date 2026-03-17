@@ -186,9 +186,8 @@
 
     <!-- ================================================================
          OV9732 wide-angle cameras — one on each side face of the chassis.
-         Mounted flush with the side faces of the top plate inside a
-         camera case. Each camera faces outward with a 30° downward tilt
-         for ground-obstacle coverage.
+         Mounted flush with the side faces of the bottom plate inside a
+         camera case. Each camera faces straight outward (no tilt).
          FOV: 100° (1.745 rad), 1280×720, USB UVC.
          ================================================================ -->
     <xacro:macro name="base_camera" params="prefix x_pos y_pos yaw_angle">
@@ -220,12 +219,12 @@
             </inertial>
         </link>
 
-        <!-- Parent: top_plate_link. Cameras sit on the side faces, at plate level. -->
+        <!-- Parent: base_link (bottom plate). Cameras sit on the side faces, facing straight out. -->
         <joint name="${prefix}_camera_joint" type="fixed">
-            <parent link="top_plate_link"/>
+            <parent link="base_link"/>
             <child link="${prefix}_camera_link"/>
             <origin xyz="${x_pos} ${y_pos} 0"
-                    rpy="0 ${-PI/6} ${yaw_angle}"/>
+                    rpy="0 0 ${yaw_angle}"/>
         </joint>
 
         <gazebo reference="${prefix}_camera_link">
