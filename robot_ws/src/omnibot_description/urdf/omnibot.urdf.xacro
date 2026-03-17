@@ -433,26 +433,105 @@
     </joint>
 
     <!-- ================================================================
-         Mecanum wheels — 4× (plain cylinder approximation, black).
-         Real wheels have diagonal rollers; use cylinder for physics.
+         Mecanum wheels — 4× with barrel roller visuals.
+
+         Wheel axis = Y in the link frame (joint axis xyz="0 1 0").
+         The wheel disk lies in the XZ plane.
+
+         8 barrel rollers are placed at φ = 0, π/4, … 7π/4 around the rim.
+         Roller centre distance from hub axis: rR = wheel_radius − roller_r
+         Roller orientation formula (derived analytically):
+           rpy = ( cs × (−π/4),  π/2 + φ,  0 )
+         where cs = +1 gives "\" chirality, cs = −1 gives "/" chirality.
+
+         Diagonal pairs share chirality: FL+RR = cs +1, FR+RL = cs −1.
+
+         Collision: plain cylinder (physics engine approximation).
          ================================================================ -->
-    <xacro:macro name="wheel" params="prefix x_reflect y_reflect yaw_reflect">
+
+    <!-- rR  = roller centre radius  = wheel_radius − 0.006        -->
+    <!-- rRn = rR × sin(π/4) ≈ rR × 0.7071  (diagonal positions)  -->
+
+    <xacro:macro name="wheel" params="prefix x_reflect y_reflect cs">
         <link name="${prefix}_wheel_link">
+
+            <!-- Hub — solid dark cylinder, slightly narrower than roller rim -->
             <visual>
                 <origin xyz="0 0 0" rpy="${PI/2} 0 0"/>
                 <geometry>
-                    <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+                    <cylinder radius="${wheel_radius * 0.80}" length="${wheel_width}"/>
                 </geometry>
                 <material name="wheel_black">
-                    <color rgba="0.1 0.1 0.1 1"/>
+                    <color rgba="0.10 0.10 0.10 1"/>
                 </material>
             </visual>
+
+            <!-- 8 barrel rollers arranged around the circumference at 45° intervals -->
+            <!-- φ = 0   (top,    +Z) -->
+            <visual>
+                <origin xyz="0 0 ${wheel_radius - 0.006}"
+                        rpy="${cs * (-PI/4)} ${PI/2} 0"/>
+                <geometry><cylinder radius="0.006" length="0.030"/></geometry>
+                <material name="roller_grey"><color rgba="0.28 0.28 0.28 1"/></material>
+            </visual>
+            <!-- φ = π/4 -->
+            <visual>
+                <origin xyz="${(wheel_radius - 0.006) * 0.7071} 0 ${(wheel_radius - 0.006) * 0.7071}"
+                        rpy="${cs * (-PI/4)} ${3 * PI/4} 0"/>
+                <geometry><cylinder radius="0.006" length="0.030"/></geometry>
+                <material name="roller_grey"/>
+            </visual>
+            <!-- φ = π/2  (front, +X) -->
+            <visual>
+                <origin xyz="${wheel_radius - 0.006} 0 0"
+                        rpy="${cs * (-PI/4)} ${PI} 0"/>
+                <geometry><cylinder radius="0.006" length="0.030"/></geometry>
+                <material name="roller_grey"/>
+            </visual>
+            <!-- φ = 3π/4 -->
+            <visual>
+                <origin xyz="${(wheel_radius - 0.006) * 0.7071} 0 ${-(wheel_radius - 0.006) * 0.7071}"
+                        rpy="${cs * (-PI/4)} ${5 * PI/4} 0"/>
+                <geometry><cylinder radius="0.006" length="0.030"/></geometry>
+                <material name="roller_grey"/>
+            </visual>
+            <!-- φ = π   (bottom, −Z) -->
+            <visual>
+                <origin xyz="0 0 ${-(wheel_radius - 0.006)}"
+                        rpy="${cs * (-PI/4)} ${3 * PI/2} 0"/>
+                <geometry><cylinder radius="0.006" length="0.030"/></geometry>
+                <material name="roller_grey"/>
+            </visual>
+            <!-- φ = 5π/4 -->
+            <visual>
+                <origin xyz="${-(wheel_radius - 0.006) * 0.7071} 0 ${-(wheel_radius - 0.006) * 0.7071}"
+                        rpy="${cs * (-PI/4)} ${7 * PI/4} 0"/>
+                <geometry><cylinder radius="0.006" length="0.030"/></geometry>
+                <material name="roller_grey"/>
+            </visual>
+            <!-- φ = 3π/2  (rear, −X) -->
+            <visual>
+                <origin xyz="${-(wheel_radius - 0.006)} 0 0"
+                        rpy="${cs * (-PI/4)} ${2 * PI} 0"/>
+                <geometry><cylinder radius="0.006" length="0.030"/></geometry>
+                <material name="roller_grey"/>
+            </visual>
+            <!-- φ = 7π/4 -->
+            <visual>
+                <origin xyz="${-(wheel_radius - 0.006) * 0.7071} 0 ${(wheel_radius - 0.006) * 0.7071}"
+                        rpy="${cs * (-PI/4)} ${9 * PI/4} 0"/>
+                <geometry><cylinder radius="0.006" length="0.030"/></geometry>
+                <material name="roller_grey"/>
+            </visual>
+
+            <!-- Collision: simple cylinder for physics (covers full wheel radius) -->
             <collision>
                 <origin xyz="0 0 0" rpy="${PI/2} 0 0"/>
                 <geometry>
                     <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
                 </geometry>
             </collision>
+
             <inertial>
                 <mass value="${wheel_mass}"/>
                 <origin xyz="0 0 0" rpy="${PI/2} 0 0"/>
@@ -471,11 +550,13 @@
             <mu2>0.8</mu2>
         </gazebo>
 
+        <!-- No yaw in joint — wheels always face straight forward/rear.
+             The diagonal roller force is handled by the MecanumDrive plugin. -->
         <joint name="${prefix}_wheel_joint" type="continuous">
             <parent link="base_link"/>
             <child link="${prefix}_wheel_link"/>
             <origin xyz="${x_reflect * wheel_x_offset} ${y_reflect * wheel_y_offset} ${wheel_z_offset}"
-                    rpy="0 0 ${yaw_reflect * PI/4}"/>
+                    rpy="0 0 0"/>
             <axis xyz="0 1 0"/>
             <limit effort="100" velocity="100"/>
         </joint>
@@ -492,10 +573,11 @@
         </transmission>
     </xacro:macro>
 
-    <xacro:wheel prefix="front_left"  x_reflect=" 1" y_reflect=" 1" yaw_reflect=" 1"/>
-    <xacro:wheel prefix="front_right" x_reflect=" 1" y_reflect="-1" yaw_reflect="-1"/>
-    <xacro:wheel prefix="rear_left"   x_reflect="-1" y_reflect=" 1" yaw_reflect="-1"/>
-    <xacro:wheel prefix="rear_right"  x_reflect="-1" y_reflect="-1" yaw_reflect=" 1"/>
+    <!-- FL+RR share cs=+1 ("\"), FR+RL share cs=−1 ("/") -->
+    <xacro:wheel prefix="front_left"  x_reflect=" 1" y_reflect=" 1" cs=" 1"/>
+    <xacro:wheel prefix="front_right" x_reflect=" 1" y_reflect="-1" cs="-1"/>
+    <xacro:wheel prefix="rear_left"   x_reflect="-1" y_reflect=" 1" cs="-1"/>
+    <xacro:wheel prefix="rear_right"  x_reflect="-1" y_reflect="-1" cs=" 1"/>
 
     <!-- ================================================================
          SO-ARM 101  — 6-DOF serial arm mounted at the FRONT of the
