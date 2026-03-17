@@ -8,18 +8,20 @@ from launch_ros.substitutions import FindPackageShare
 import os
 
 def generate_launch_description():
-    pkg_ros_gz_sim = FindPackageShare(package='ros_gz_sim').find('ros_gz_sim')
+    pkg_ros_gz_sim         = FindPackageShare(package='ros_gz_sim').find('ros_gz_sim')
     pkg_omnibot_description = FindPackageShare(package='omnibot_description').find('omnibot_description')
-    pkg_omnibot_bringup = FindPackageShare(package='omnibot_bringup').find('omnibot_bringup')
+    pkg_omnibot_bringup    = FindPackageShare(package='omnibot_bringup').find('omnibot_bringup')
+    pkg_omnibot_arm        = FindPackageShare(package='omnibot_arm').find('omnibot_arm')
 
-    xacro_file = os.path.join(pkg_omnibot_description, 'urdf', 'omnibot.urdf.xacro')
+    xacro_file       = os.path.join(pkg_omnibot_description, 'urdf', 'omnibot.urdf.xacro')
     rviz_config_path = os.path.join(pkg_omnibot_bringup, 'config', 'omnibot.rviz')
-    bridge_config = os.path.join(pkg_omnibot_bringup, 'config', 'ros_gz_bridge.yaml')
-    world_file = os.path.join(pkg_omnibot_bringup, 'worlds', 'omnibot_world.sdf')
+    bridge_config    = os.path.join(pkg_omnibot_bringup, 'config', 'ros_gz_bridge.yaml')
+    world_file       = os.path.join(pkg_omnibot_bringup, 'worlds', 'omnibot_world.sdf')
+    arm_params       = os.path.join(pkg_omnibot_arm, 'config', 'arm_params.yaml')
 
     robot_desc = ParameterValue(Command(['xacro ', xacro_file]), value_type=str)
 
-    # 1. Gazebo Sim — -r means "run" (not paused)
+    # ── 1. Gazebo Sim (-r = run unpaused) ────────────────────────────────────
     gazebo = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(pkg_ros_gz_sim, 'launch', 'gz_sim.launch.py')
@@ -27,7 +29,7 @@ def generate_launch_description():
         launch_arguments={'gz_args': f'-r {world_file}'}.items(),
     )
 
-    # 2. Robot State Publisher — must start before spawn
+    # ── 2. Robot State Publisher ──────────────────────────────────────────────
     robot_state_publisher = Node(
         package='robot_state_publisher',
         executable='robot_state_publisher',
@@ -35,7 +37,7 @@ def generate_launch_description():
         parameters=[{'robot_description': robot_desc}]
     )
 
-    # 3. Spawn Entity — wait 3s for RSP to publish /robot_description
+    # ── 3. Spawn robot — wait 3 s for RSP to publish /robot_description ──────
     spawn_entity = TimerAction(
         period=3.0,
         actions=[
@@ -52,22 +54,39 @@ def generate_launch_description():
         ]
     )
 
-    # 4. ROS <-> GZ Bridge — use @ (bidirectional) format, confirmed working
+    # ── 4. ROS ↔ GZ bridge — use the YAML config (was defined but unused) ────
+    # Bridges:  /cmd_vel, /odom, /tf, /imu/data, /camera/*, /joint_states
     bridge = Node(
         package='ros_gz_bridge',
         executable='parameter_bridge',
-        arguments=[
-            '/cmd_vel@geometry_msgs/msg/Twist@gz.msgs.Twist',
-            '/odom@nav_msgs/msg/Odometry@gz.msgs.Odometry',
-            '/tf@tf2_msgs/msg/TFMessage@gz.msgs.Pose_V',
-            '/imu/data@sensor_msgs/msg/Imu[gz.msgs.IMU',
-            '/camera/image_raw@sensor_msgs/msg/Image[gz.msgs.Image',
-            '/camera/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo',
-        ],
+        parameters=[{'config_file': bridge_config}],
         output='screen'
     )
 
-    # 5. Robot State Publisher
+    # ── 5. Arm driver — simulation passthrough mode ───────────────────────────
+    # Receives /arm/joint_commands, stores commanded positions, publishes them.
+    # Remapped onto /joint_states so robot_state_publisher gets arm joint angles
+    # (wheel joint angles come from Gazebo JointStatePublisher via the bridge).
+    # joint_names in arm_params.yaml MUST match the URDF joint names (arm_ prefix).
+    arm_driver = TimerAction(
+        period=4.0,   # wait for Gazebo + RSP to be fully up
+        actions=[
+            Node(
+                package='omnibot_arm',
+                executable='arm_driver_node.py',
+                name='arm_driver_node',
+                output='screen',
+                parameters=[arm_params],
+                remappings=[
+                    # Feed arm joint angles into /joint_states so robot_state_publisher
+                    # can animate the arm in RViz alongside the wheel states from Gazebo.
+                    ('/arm/joint_states', '/joint_states'),
+                ],
+            )
+        ]
+    )
+
+    # ── 6. RViz ───────────────────────────────────────────────────────────────
     rviz = Node(
         package='rviz2',
         executable='rviz2',
@@ -81,5 +100,6 @@ def generate_launch_description():
         robot_state_publisher,
         spawn_entity,
         bridge,
-        rviz
+        arm_driver,
+        rviz,
     ])

@@ -2,6 +2,14 @@
 # ros_gz_bridge configuration for Mecanum Wheel Robot simulation
 # Direction: ROS → GZ uses subscriber_queue_size; GZ → ROS uses publisher_queue_size
 
+# ── Joint states — wheels (Gazebo JointStatePublisher → robot_state_publisher) ──
+# gz.msgs.Model is the Gazebo Harmonic type published by gz-sim-joint-state-publisher-system.
+- ros_topic_name: "/joint_states"
+  gz_topic_name: "/joint_states"
+  ros_type_name: "sensor_msgs/msg/JointState"
+  gz_type_name: "gz.msgs.Model"
+  direction: GZ_TO_ROS
+
 - ros_topic_name: "/cmd_vel"
   gz_topic_name: "/cmd_vel"
   ros_type_name: "geometry_msgs/msg/Twist"

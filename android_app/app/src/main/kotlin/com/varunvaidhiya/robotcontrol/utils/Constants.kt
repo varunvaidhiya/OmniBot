@@ -26,6 +26,21 @@ object Constants {
     const val TOPIC_IMU = "/imu/data"
     const val TOPIC_DIAGNOSTICS = "/diagnostics"
 
+    // Arm topics — SO-101 6-DOF manipulator
+    const val TOPIC_ARM_JOINT_COMMANDS = "/arm/joint_commands"  // publish (sensor_msgs/JointState)
+    const val TOPIC_ARM_JOINT_STATES   = "/arm/joint_states"    // subscribe (sensor_msgs/JointState)
+    const val TOPIC_ARM_ENABLE         = "/arm/enable"          // publish (std_msgs/Bool)
+
+    // URDF joint names for the arm (must match omnibot.urdf.xacro exactly)
+    val ARM_JOINT_NAMES = listOf(
+        "arm_shoulder_pan",
+        "arm_shoulder_lift",
+        "arm_elbow_flex",
+        "arm_wrist_flex",
+        "arm_wrist_roll",
+        "arm_gripper"
+    )
+
     // Legacy custom topics (kept for compatibility)
     const val TOPIC_ROBOT_STATUS = "/robot_status"
     const val TOPIC_WHEEL_SPEEDS = "/wheel_speeds"

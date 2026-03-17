@@ -95,6 +95,7 @@
   <div id="info">Updated URDF v2 — two-plate chassis + SO-ARM 101<br>Red arrow = +X (forward)</div>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/loaders/STLLoader.js"></script>
 <script>
 // ── Scene setup ─────────────────────────────────────────────────────────────
 const canvas = document.getElementById('renderer');
@@ -269,135 +270,142 @@ scene.add(arrowHelper);
 scene.add(new THREE.AxesHelper(0.12));
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// SO-ARM 101 (simplified primitives — correct kinematic chain)
-// Mounted at x=+0.055m (front area) on top plate, y=0 (centre), z_top_surface
-// Three.js: arm_x → Three_x (forward), arm_y → Three_z, arm_z → Three_y
+// SO-ARM 101 — Official STL meshes loaded from so101_new_calib.urdf
+//
+// Strategy: build kinematic chain in URDF space (Z-up), then rotate the whole
+// armRoot group by -90° around X to convert to Three.js Y-up.
+// All joint xyz/rpy and visual origin xyz/rpy values are used verbatim from
+// the official URDF — no coordinate remapping needed inside the chain.
 // ═══════════════════════════════════════════════════════════════════════════════
+
 const armGroup = new THREE.Group();
-// Place arm at front-centre of top plate top surface
-// URDF arm_base_joint: (0.055, 0, plate_thickness/2) in top_plate frame
+// arm_base_joint: parent=top_plate_link, xyz=(0.055, 0, PT/2)
+// In Three.js world (Y-up): x=0.055 forward, y=TOP_Z+PT/2 up, z=0
 armGroup.position.set(0.055, TOP_Z + PT/2, 0);
 robot.add(armGroup);
 
-const ARM_WHITE = 0xf0f0f0;
-const SERVO_DARK = 0x202020;
+// Adapter: URDF frame (Z-up, X-forward) → Three.js frame (Y-up, X-forward)
+// Rotating by -90° around X maps: URDF-Z → Three-Y, URDF-Y → Three-(-Z)
+const armRoot = new THREE.Group();
+armRoot.rotation.x = -Math.PI / 2;
+armGroup.add(armRoot);
 
-// Helper: add arm link as box with edges
-function armBox(w, h, d, color, px=0, py=0, pz=0, rx=0, ry=0, rz=0) {
-  const m = box(w, h, d, color);
-  m.position.set(px, py, pz);
-  m.rotation.set(rx, ry, rz);
-  return m;
+// STL loader + materials
+const stlLoader = new THREE.STLLoader();
+const MESH_BASE = 'robot_ws/src/omnibot_description/meshes/so101/';
+const mat3d  = new THREE.MeshPhongMaterial({ color: 0xf2f2f2, shininess: 35 });
+const matSTS = new THREE.MeshPhongMaterial({ color: 0x141414, shininess: 90 });
+
+// Load a single STL and add to parent group at the visual origin (URDF coords)
+function loadSTL(file, mat, parent, ox, oy, oz, rx, ry, rz) {
+  stlLoader.load(MESH_BASE + file, geo => {
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, mat.clone());
+    mesh.position.set(ox, oy, oz);
+    mesh.rotation.set(rx, ry, rz);
+    mesh.castShadow = true;
+    parent.add(mesh);
+  }, undefined, () => {
+    // fallback placeholder if mesh fails to load
+    const fb = new THREE.Mesh(
+      new THREE.BoxGeometry(0.02, 0.02, 0.02),
+      new THREE.MeshPhongMaterial({ color: 0xff4444, wireframe: true })
+    );
+    fb.position.set(ox, oy, oz);
+    parent.add(fb);
+  });
 }
 
-// ── arm_base_link ─────────────────────────────────────────────────────────────
-// Box: 70×62×70 mm (x,y,z in Three.js = length, height, width)
-const armBase = new THREE.Group();
-armBase.position.set(0, 0, 0);
-const abBody = armBox(0.070, 0.062, 0.070, ARM_WHITE, 0, 0.031, 0);
-edges(abBody, 0xaaaaaa);
-armBase.add(abBody);
-// Bottom servo body (dark block)
-const abServo = armBox(0.040, 0.040, 0.025, SERVO_DARK, 0.026, 0.044, 0);
-armBase.add(abServo);
-armGroup.add(armBase);
+// ── arm_base_link (URDF frame origin = armRoot origin) ───────────────────────
+const gBase = new THREE.Group();
+armRoot.add(gBase);
+loadSTL('base_motor_holder_so101_v1.stl', mat3d,  gBase, -0.00636471, -9.94414e-05, -0.0024,  1.5708, -1.67685e-15, 1.5708);
+loadSTL('base_so101_v2.stl',              mat3d,  gBase, -0.00636471, -8.97657e-09, -0.0024,  1.5708, -2.78073e-29, 1.5708);
+loadSTL('sts3215_03a_v1.stl',             matSTS, gBase,  0.0263353,  -8.97657e-09,  0.0437, -8.21148e-16, 7.84513e-18, 1.249e-15);
+loadSTL('waveshare_mounting_plate_so101_v2.stl', mat3d, gBase, -0.0309827, -0.000199441, 0.0474, 1.5708, -1.35493e-14, 1.5708);
 
-// ── arm_shoulder_link ─────────────────────────────────────────────────────────
-// shoulder_pan joint from SO-101: origin (0.0388, 0, 0.0624) in arm_base frame
-// URDF x=0.0388 → Three x=0.0388
-// URDF z=0.0624 → Three y=0.0624
-const armShoulder = new THREE.Group();
-armShoulder.position.set(0.0388, 0.0624, 0);
-armBase.add(armShoulder);
+// ── shoulder_pan joint → arm_shoulder_link ───────────────────────────────────
+// Joint origin xyz=(0.0388353, ~0, 0.0624) rpy=(π, ~0, -π)  [URDF coords]
+const gShoulder = new THREE.Group();
+gShoulder.position.set(0.0388353, -8.97657e-09, 0.0624);
+gShoulder.rotation.set(3.14159, 4.18253e-17, -3.14159);
+gBase.add(gShoulder);
 
-// Shoulder servo (dark cylinder on its side)
-const shServo = cyl(0.020, 0.050, SERVO_DARK);
-shServo.rotation.x = Math.PI / 2;
-shServo.position.set(-0.030, -0.025, 0);
-armShoulder.add(shServo);
-// Motor holder + bracket (white)
-const shBracket = armBox(0.040, 0.035, 0.045, ARM_WHITE, 0.012, 0.046, 0);
-edges(shBracket, 0xaaaaaa);
-armShoulder.add(shBracket);
+// Revolute sub-group: shoulder_pan rotates around joint Z (URDF), axis xyz="0 0 1"
+const gShoulderR = new THREE.Group(); // rotation.z = joint angle
+gShoulder.add(gShoulderR);
 
-// ── arm_upper_arm_link ────────────────────────────────────────────────────────
-// shoulder_lift joint: origin (-0.0304, -0.0183, -0.0542) from shoulder in URDF
-// Map: URDF(x,y,z) → Three(x, -y, z) but considering rpy
-// Simplified: upper arm extends mostly in -x (arm goes "away" from shoulder servo)
-const armUpperArm = new THREE.Group();
-// Simplified placement: forward and up from shoulder
-armUpperArm.position.set(-0.030, -0.054, -0.018);
-armShoulder.add(armUpperArm);
+loadSTL('sts3215_03a_v1.stl',             matSTS, gShoulderR, -0.0303992,  0.000422241, -0.0417,  1.5708, 1.5708, 0);
+loadSTL('motor_holder_so101_base_v1.stl', mat3d,  gShoulderR, -0.0675992, -0.000177759,  0.0158499, 1.5708, -1.5708, 0);
+loadSTL('rotation_pitch_so101_v1.stl',    mat3d,  gShoulderR,  0.0122008,  2.22413e-05,  0.0464, -1.5708, 2.35221e-33, 0);
 
-const uaBeam = armBox(0.125, 0.030, 0.035, ARM_WHITE, -0.065, 0.012, 0);
-edges(uaBeam, 0xaaaaaa);
-armUpperArm.add(uaBeam);
-// Elbow servo (dark cylinder)
-const uaServo = cyl(0.018, 0.040, SERVO_DARK);
-uaServo.rotation.x = Math.PI / 2;
-uaServo.position.set(-0.113, 0.019, -0.016);
-armUpperArm.add(uaServo);
+// ── shoulder_lift joint → arm_upper_arm_link ─────────────────────────────────
+// Joint origin xyz=(-0.0304, -0.0183, -0.0542) rpy=(-π/2, -π/2, 0)
+const gUpperArm = new THREE.Group();
+gUpperArm.position.set(-0.0303992, -0.0182778, -0.0542);
+gUpperArm.rotation.set(-1.5708, -1.5708, 0);
+gShoulderR.add(gUpperArm);
 
-// ── arm_lower_arm_link (forearm) ──────────────────────────────────────────────
-// elbow_flex joint: origin (-0.11257, -0.028, 0) from upper_arm
-const armLowerArm = new THREE.Group();
-armLowerArm.position.set(-0.11257, -0.028, 0);
-armUpperArm.add(armLowerArm);
+const gUpperArmR = new THREE.Group(); // rotation.z = shoulder_lift angle
+gUpperArm.add(gUpperArmR);
 
-const laBeam = armBox(0.125, 0.028, 0.030, ARM_WHITE, -0.065, -0.032, 0);
-edges(laBeam, 0xaaaaaa);
-armLowerArm.add(laBeam);
-// Wrist servo (dark)
-const laServo = cyl(0.018, 0.040, SERVO_DARK);
-laServo.rotation.x = Math.PI / 2;
-laServo.position.set(-0.122, 0.019, 0.005);
-armLowerArm.add(laServo);
+loadSTL('sts3215_03a_v1.stl',    matSTS, gUpperArmR, -0.11257, -0.0155,  0.0187, -3.14159, -5.27356e-16, -1.5708);
+loadSTL('upper_arm_so101_v1.stl', mat3d, gUpperArmR, -0.065085, 0.012,   0.0182,  3.14159, -0, -1.30911e-30);
 
-// ── arm_wrist_link ────────────────────────────────────────────────────────────
-// wrist_flex joint: origin (-0.1349, 0.0052, 0) from lower_arm
-const armWrist = new THREE.Group();
-armWrist.position.set(-0.1349, 0.0052, 0);
-armLowerArm.add(armWrist);
+// ── elbow_flex joint → arm_lower_arm_link ────────────────────────────────────
+// Joint origin xyz=(-0.11257, -0.028, ~0) rpy=(~0, ~0, π/2)
+const gLowerArm = new THREE.Group();
+gLowerArm.position.set(-0.11257, -0.028, 1.73763e-16);
+gLowerArm.rotation.set(-3.63608e-16, 8.74301e-16, 1.5708);
+gUpperArmR.add(gLowerArm);
 
-const wristBody = armBox(0.038, 0.035, 0.035, ARM_WHITE, 0, -0.028, 0.018);
-edges(wristBody, 0xaaaaaa);
-armWrist.add(wristBody);
-const wristServo = cyl(0.018, 0.040, SERVO_DARK);
-wristServo.rotation.z = Math.PI / 2;
-wristServo.position.set(0, -0.042, 0.031);
-armWrist.add(wristServo);
+const gLowerArmR = new THREE.Group(); // rotation.z = elbow_flex angle
+gLowerArm.add(gLowerArmR);
 
-// ── arm_gripper_link ──────────────────────────────────────────────────────────
-// wrist_roll joint: origin (0, -0.0611, 0.0181) from wrist
-const armGripper = new THREE.Group();
-armGripper.position.set(0, -0.0611, 0.0181);
-armWrist.add(armGripper);
+loadSTL('under_arm_so101_v1.stl',          mat3d,  gLowerArmR, -0.0648499, -0.032,  0.0182, 3.14159, -0, 6.67202e-31);
+loadSTL('motor_holder_so101_wrist_v1.stl', mat3d,  gLowerArmR, -0.0648499, -0.032,  0.018, -3.14159, -2.55351e-15, -1.83387e-30);
+loadSTL('sts3215_03a_v1.stl',              matSTS, gLowerArmR, -0.1224,     0.0052,  0.0187, -3.14159, -7.88861e-31, -3.14159);
 
-const gripBody = armBox(0.070, 0.035, 0.040, ARM_WHITE, 0, 0, 0);
-edges(gripBody, 0xaaaaaa);
-armGripper.add(gripBody);
-const gripServo = cyl(0.018, 0.040, SERVO_DARK);
-gripServo.rotation.z = Math.PI / 2;
-gripServo.position.set(-0.015, 0, 0);
-armGripper.add(gripServo);
-// Static jaw finger
-const staticJaw = armBox(0.018, 0.050, 0.010, ARM_WHITE, 0.040, -0.025, 0);
-armGripper.add(staticJaw);
+// ── wrist_flex joint → arm_wrist_link ────────────────────────────────────────
+// Joint origin xyz=(-0.1349, 0.0052, ~0) rpy=(~0, ~0, -π/2)
+const gWrist = new THREE.Group();
+gWrist.position.set(-0.1349, 0.0052, 3.62355e-17);
+gWrist.rotation.set(4.02456e-15, 8.67362e-16, -1.5708);
+gLowerArmR.add(gWrist);
 
-// ── arm_jaw_link ──────────────────────────────────────────────────────────────
-// gripper joint: origin (0.0202, 0.0188, -0.0234) from gripper
-const armJaw = new THREE.Group();
-armJaw.position.set(0.0202, 0.0188, -0.0234);
-armGripper.add(armJaw);
+const gWristR = new THREE.Group(); // rotation.z = wrist_flex angle
+gWrist.add(gWristR);
 
-const jawBox2 = armBox(0.018, 0.050, 0.010, ARM_WHITE, 0, -0.025, 0);
-armJaw.add(jawBox2);
+loadSTL('sts3215_03a_no_horn_v1.stl',  matSTS, gWristR, 8.32667e-17, -0.0424,  0.0306, 1.5708, 1.5708, 0);
+loadSTL('wrist_roll_pitch_so101_v2.stl', mat3d, gWristR, 0,           -0.028,   0.0181, -1.5708, -1.5708, 0);
 
-// ── Wrist camera on gripper ───────────────────────────────────────────────────
+// ── wrist_roll joint → arm_gripper_link ──────────────────────────────────────
+// Joint origin xyz=(~0, -0.0611, 0.0181) rpy=(π/2, 0.0487, π)
+const gGripper = new THREE.Group();
+gGripper.position.set(5.55112e-17, -0.0611, 0.0181);
+gGripper.rotation.set(1.5708, 0.0486795, 3.14159);
+gWristR.add(gGripper);
+
+const gGripperR = new THREE.Group(); // rotation.z = wrist_roll angle
+gGripper.add(gGripperR);
+
+loadSTL('sts3215_03a_v1.stl',              matSTS, gGripperR, 0.0077,  0.0001, -0.0234, -1.5708, -5.19179e-17, -1.66533e-16);
+loadSTL('wrist_roll_follower_so101_v1.stl', mat3d, gGripperR, 8.32667e-17, -0.000218214, 0.000949706, -3.14159, -5.55112e-17, 0);
+
+// ── gripper joint → moving_jaw_link ──────────────────────────────────────────
+const gJaw = new THREE.Group();
+gJaw.position.set(0.0202, 0.0188, -0.0234);
+gJaw.rotation.set(1.5708, -5.24284e-08, -1.41553e-15);
+gGripperR.add(gJaw);
+
+loadSTL('moving_jaw_so101_v1.stl', mat3d, gJaw, -5.55112e-17, -5.55112e-17, 0.0189, 9.53145e-17, 6.93889e-18, 1.24077e-24);
+
+// ── Wrist camera (still a box primitive) ─────────────────────────────────────
 const wristCam = box(0.025, 0.020, 0.020, 0x888888, 0.85);
-wristCam.position.set(0.030, 0.025, 0);
+// In URDF: parent=arm_gripper_link, xyz=(0.030, 0, 0.025) — URDF space in gGripperR
+wristCam.position.set(0.030, 0, 0.025);
 edges(wristCam, 0xaaaaaa);
-armGripper.add(wristCam);
+gGripperR.add(wristCam);
 
 // ── Arm visibility toggle ─────────────────────────────────────────────────────
 let armVisible = true;
@@ -408,25 +416,29 @@ function toggleArm() {
   document.getElementById('armBtn').classList.toggle('active', armVisible);
 }
 
-// ── Arm pose animation ────────────────────────────────────────────────────────
+// ── Arm pose animation (rotates around URDF joint Z axes) ────────────────────
 let poseIndex = 0;
 const poses = [
-  // [shoulder_pan_y, shoulder_lift_x, elbow_x]
-  { name: 'Home',    pan: 0,          lift: 0,     elbow: 0 },
-  { name: 'Reach',   pan: 0,          lift: -0.5,  elbow:  0.6 },
-  { name: 'Left',    pan:  0.8,       lift: -0.3,  elbow:  0.4 },
-  { name: 'Right',   pan: -0.8,       lift: -0.3,  elbow:  0.4 },
-  { name: 'Low',     pan:  0,         lift: -1.2,  elbow:  1.4 },
+  { name: 'Home',    pan: 0,     lift: 0,     elbow: 0,    wflex: 0,    wroll: 0 },
+  { name: 'Reach',   pan: 0,     lift: -0.8,  elbow:  1.2, wflex: 0,    wroll: 0 },
+  { name: 'Left',    pan:  1.2,  lift: -0.5,  elbow:  0.8, wflex: 0,    wroll: 0 },
+  { name: 'Right',   pan: -1.2,  lift: -0.5,  elbow:  0.8, wflex: 0,    wroll: 0 },
+  { name: 'Grasp',   pan: 0,     lift: -1.2,  elbow:  1.5, wflex: -0.8, wroll: 0 },
 ];
 function cyclePose() {
   poseIndex = (poseIndex + 1) % poses.length;
   const p = poses[poseIndex];
-  armShoulder.rotation.y = p.pan;
-  armUpperArm.rotation.z = p.lift;
-  armLowerArm.rotation.z = p.elbow;
+  gShoulderR.rotation.z  = p.pan;
+  gUpperArmR.rotation.z  = p.lift;
+  gLowerArmR.rotation.z  = p.elbow;
+  gWristR.rotation.z     = p.wflex;
+  gGripperR.rotation.z   = p.wroll;
   document.getElementById('info').innerHTML =
-    `Arm pose: <strong>${p.name}</strong><br>Primitives only — no STL meshes`;
+    `Arm pose: <strong>${p.name}</strong><br>SO-101 STL meshes`;
 }
+
+// Expose for view preset
+const armShoulder = gShoulderR;
 
 // ── Orbit Controls ────────────────────────────────────────────────────────────
 let isDragging = false, isRightDrag = false;

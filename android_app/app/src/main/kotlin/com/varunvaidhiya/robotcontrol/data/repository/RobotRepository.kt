@@ -46,6 +46,14 @@ class RobotRepository @Inject constructor() {
     private val _wheelSpeeds = MutableStateFlow(WheelSpeed())
     val wheelSpeeds: StateFlow<WheelSpeed> = _wheelSpeeds.asStateFlow()
 
+    // ── Arm joints (/arm/joint_states) ────────────────────────────────────────
+    // Ordered by Constants.ARM_JOINT_NAMES: shoulder_pan, shoulder_lift,
+    // elbow_flex, wrist_flex, wrist_roll, gripper (radians).
+    private val _armJointPositions = MutableStateFlow(
+        DoubleArray(Constants.ARM_JOINT_NAMES.size) { 0.0 }
+    )
+    val armJointPositions: StateFlow<DoubleArray> = _armJointPositions.asStateFlow()
+
     // ── ROSBridge listener ────────────────────────────────────────────────────
     private val rosListener = object : ROSBridgeListener {
         override fun onConnected() {
@@ -91,6 +99,30 @@ class RobotRepository @Inject constructor() {
         rosManager?.publish(Constants.TOPIC_EMERGENCY_STOP, mapOf("data" to true))
     }
 
+    /**
+     * Send arm joint positions in radians.
+     * [positions] must be aligned with Constants.ARM_JOINT_NAMES.
+     * Publishes sensor_msgs/JointState to /arm/joint_commands.
+     */
+    fun sendArmJointCommand(positions: DoubleArray) {
+        val names = Constants.ARM_JOINT_NAMES
+        val posList = positions.toList()
+        rosManager?.publish(
+            Constants.TOPIC_ARM_JOINT_COMMANDS,
+            mapOf(
+                "name"     to names,
+                "position" to posList,
+                "velocity" to emptyList<Double>(),
+                "effort"   to emptyList<Double>()
+            )
+        )
+    }
+
+    /** Enable or disable arm torque (std_msgs/Bool → /arm/enable). */
+    fun setArmEnabled(enabled: Boolean) {
+        rosManager?.publish(Constants.TOPIC_ARM_ENABLE, mapOf("data" to enabled))
+    }
+
     fun sendMode(mode: RobotMode) {
         rosManager?.publish(Constants.TOPIC_ROBOT_MODE, mapOf("data" to mode.name))
         _robotStatus.value = _robotStatus.value.copy(currentMode = mode)
@@ -101,25 +133,28 @@ class RobotRepository @Inject constructor() {
     private fun subscribeToTopics() {
         rosManager?.apply {
             // Standard ROS topics
-            subscribe(Constants.TOPIC_ODOM,        "nav_msgs/Odometry")
-            subscribe(Constants.TOPIC_MAP,          "nav_msgs/OccupancyGrid")
-            subscribe(Constants.TOPIC_IMU,          "sensor_msgs/Imu")
-            subscribe(Constants.TOPIC_DIAGNOSTICS,  "diagnostic_msgs/DiagnosticArray")
+            subscribe(Constants.TOPIC_ODOM,             "nav_msgs/Odometry")
+            subscribe(Constants.TOPIC_MAP,               "nav_msgs/OccupancyGrid")
+            subscribe(Constants.TOPIC_IMU,               "sensor_msgs/Imu")
+            subscribe(Constants.TOPIC_DIAGNOSTICS,       "diagnostic_msgs/DiagnosticArray")
+            // Arm joint feedback
+            subscribe(Constants.TOPIC_ARM_JOINT_STATES, "sensor_msgs/JointState")
             // Legacy custom topics
-            subscribe(Constants.TOPIC_ROBOT_STATUS, "robot_msgs/RobotStatus")
-            subscribe(Constants.TOPIC_WHEEL_SPEEDS, "robot_msgs/WheelSpeed")
-            subscribe(Constants.TOPIC_MOTOR_PWM,    "robot_msgs/MotorData")
+            subscribe(Constants.TOPIC_ROBOT_STATUS,     "robot_msgs/RobotStatus")
+            subscribe(Constants.TOPIC_WHEEL_SPEEDS,     "robot_msgs/WheelSpeed")
+            subscribe(Constants.TOPIC_MOTOR_PWM,        "robot_msgs/MotorData")
         }
     }
 
     private fun handleMessage(topic: String, message: Map<String, Any>) {
         try {
             when (topic) {
-                Constants.TOPIC_ODOM        -> parseOdom(message)
-                Constants.TOPIC_MAP         -> parseMap(message)
-                Constants.TOPIC_ROBOT_STATUS -> parseRobotStatus(message)
-                Constants.TOPIC_WHEEL_SPEEDS -> parseWheelSpeeds(message)
-                Constants.TOPIC_MOTOR_PWM   -> parseMotorData(message)
+                Constants.TOPIC_ODOM             -> parseOdom(message)
+                Constants.TOPIC_MAP              -> parseMap(message)
+                Constants.TOPIC_ARM_JOINT_STATES -> parseArmJointStates(message)
+                Constants.TOPIC_ROBOT_STATUS     -> parseRobotStatus(message)
+                Constants.TOPIC_WHEEL_SPEEDS     -> parseWheelSpeeds(message)
+                Constants.TOPIC_MOTOR_PWM        -> parseMotorData(message)
             }
         } catch (e: Exception) {
             Timber.e(e, "Error parsing message for topic: $topic")
@@ -193,6 +228,17 @@ class RobotRepository @Inject constructor() {
         val bl = (msg["back_left"]   as? Number)?.toFloat() ?: 0f
         val br = (msg["back_right"]  as? Number)?.toFloat() ?: 0f
         _wheelSpeeds.value = WheelSpeed(frontLeft = fl, frontRight = fr, backLeft = bl, backRight = br)
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun parseArmJointStates(msg: Map<String, Any>) {
+        val names     = (msg["name"]     as? List<*>)?.filterIsInstance<String>() ?: return
+        val positions = (msg["position"] as? List<*>)?.map { (it as? Number)?.toDouble() ?: 0.0 } ?: return
+        val nameToPos = names.zip(positions).toMap()
+        val updated = DoubleArray(Constants.ARM_JOINT_NAMES.size) { i ->
+            nameToPos[Constants.ARM_JOINT_NAMES[i]] ?: _armJointPositions.value[i]
+        }
+        _armJointPositions.value = updated
     }
 
     private fun parseMotorData(msg: Map<String, Any>) {
