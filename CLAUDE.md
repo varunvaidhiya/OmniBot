@@ -6,6 +6,14 @@ parameters, or conventions.
 
 ---
 
+## Git & PR Conventions
+
+- **Never** include `claude.ai/code/session_*` URLs (or any Claude session links)
+  in git commit messages, PR titles, PR descriptions, PR comments, or merge
+  commit messages. This applies to all future work in this repository.
+
+---
+
 ## Project Overview
 
 **OmniBot** is a ROS 2 mecanum-wheel mobile-manipulation robot with embodied AI
