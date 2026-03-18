@@ -81,19 +81,108 @@ class MjpegView @JvmOverloads constructor(
         invalidate()
     }
 
+    /**
+     * Reads one JPEG frame from a multipart/x-mixed-replace MJPEG stream.
+     *
+     * Protocol (RFC 2046 multipart):
+     *   --boundary\r\n
+     *   Content-Type: image/jpeg\r\n
+     *   Content-Length: NNNN\r\n
+     *   \r\n
+     *   [NNNN bytes of JPEG data]
+     *   \r\n
+     *   --boundary\r\n  ...
+     *
+     * Primary path  – Content-Length header present: read exactly N bytes and
+     *                 decode with BitmapFactory.decodeByteArray (fast, reliable).
+     * Fallback path – no Content-Length: scan raw bytes for JPEG SOI (0xFF 0xD8)
+     *                 and EOI (0xFF 0xD9) markers.
+     */
     private fun readMjpegFrame(bis: BufferedInputStream): Bitmap? {
-        // Simplified MJPEG parsing logic
-        // In production, robust boundary detection is needed
-        // This expects standard MJPEG boundaries
-        // TODO: Implement robust content-length parsing
-        // For now, allow BitmapFactory to attempt decoding stream
-        // Note: This is blocking and naive, but often "just works" for simple streams
-        // If it fails, we need manual byte-scanning for 0xFF 0xD8 (SOI) and 0xFF 0xD9 (EOI)
-        
         return try {
-             BitmapFactory.decodeStream(bis)
+            // --- Step 1: advance to the next MIME part boundary ---
+            // A boundary line starts with "--". We allow up to 100 lines of
+            // padding/preamble before giving up.
+            var line = readStreamLine(bis)
+            var attempts = 0
+            while (!line.startsWith("--") && ++attempts < 100) {
+                line = readStreamLine(bis)
+            }
+            if (!line.startsWith("--")) {
+                Timber.w("MJPEG: boundary not found within $attempts lines")
+                return null
+            }
+
+            // --- Step 2: parse MIME part headers ---
+            var contentLength = -1
+            while (true) {
+                line = readStreamLine(bis)
+                if (line.isEmpty()) break  // blank line == end of headers
+                if (line.startsWith("Content-Length:", ignoreCase = true)) {
+                    contentLength = line.substringAfter(':').trim().toIntOrNull() ?: -1
+                }
+            }
+
+            // --- Step 3: decode the JPEG frame ---
+            if (contentLength > 0) {
+                // Fast path: exact byte read
+                val bytes = ByteArray(contentLength)
+                var offset = 0
+                while (offset < contentLength) {
+                    val n = bis.read(bytes, offset, contentLength - offset)
+                    if (n == -1) return null
+                    offset += n
+                }
+                BitmapFactory.decodeByteArray(bytes, 0, contentLength)
+            } else {
+                // Fallback: scan for SOI / EOI JPEG markers
+                readJpegByMarkers(bis)
+            }
         } catch (e: Exception) {
+            Timber.w(e, "MJPEG frame read error")
             null
+        }
+    }
+
+    /**
+     * Reads one text line from [bis], consuming bytes until `\n` (stripping any
+     * trailing `\r`). Safe to use on a raw stream — does not over-read.
+     */
+    private fun readStreamLine(bis: BufferedInputStream): String {
+        val sb = StringBuilder()
+        while (true) {
+            val b = bis.read()
+            if (b == -1 || b == '\n'.code) break
+            if (b != '\r'.code) sb.append(b.toChar())
+        }
+        return sb.toString()
+    }
+
+    /**
+     * Fallback JPEG frame reader: accumulates bytes between the JPEG
+     * Start-Of-Image marker (0xFF 0xD8) and End-Of-Image marker (0xFF 0xD9).
+     */
+    private fun readJpegByMarkers(bis: BufferedInputStream): Bitmap? {
+        val buffer = ArrayList<Byte>(65536)
+        var inJpeg = false
+        var prev = -1
+        while (true) {
+            val b = bis.read()
+            if (b == -1) return null
+            if (!inJpeg) {
+                if (prev == 0xFF && b == 0xD8) {
+                    inJpeg = true
+                    buffer.add(0xFF.toByte())
+                    buffer.add(0xD8.toByte())
+                }
+            } else {
+                buffer.add(b.toByte())
+                if (prev == 0xFF && b == 0xD9) {
+                    val bytes = buffer.toByteArray()
+                    return BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                }
+            }
+            prev = b
         }
     }
 
