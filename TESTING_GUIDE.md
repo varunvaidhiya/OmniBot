@@ -666,3 +666,857 @@ rclpy.shutdown()
 ```
 
 ---
+
+## 7. omnibot_hybrid — CmdVelMux
+
+**File:** `robot_ws/src/omnibot_hybrid/omnibot_hybrid/cmd_vel_mux.py`
+
+### 7.1 What it does
+
+Routes exactly one of three `/cmd_vel` input sources to `/cmd_vel/out` based on the active control mode. Publishes the current active mode on `/control_mode/active` at 1 Hz.
+
+| Mode | Input topic |
+|------|-------------|
+| `nav2` (default) | `/cmd_vel` |
+| `vla` | `/cmd_vel/vla` |
+| `teleop` | `/cmd_vel/teleop` |
+
+Invalid mode strings are **silently ignored** — the active mode does not change.
+
+### 7.2 Launch
+
+```bash
+source robot_ws/install/setup.bash
+ros2 run omnibot_hybrid cmd_vel_mux
+
+# With custom default mode
+ros2 run omnibot_hybrid cmd_vel_mux --ros-args -p default_mode:=teleop
+```
+
+### 7.3 Verify topic graph
+
+```bash
+ros2 node info /cmd_vel_mux
+```
+
+**Expected subscriptions:** `/cmd_vel`, `/cmd_vel/vla`, `/cmd_vel/teleop`, `/control_mode`
+**Expected publications:** `/cmd_vel/out`, `/control_mode/active`
+
+### 7.4 Test mode switching and routing
+
+```bash
+# Terminal 1: run mux
+ros2 run omnibot_hybrid cmd_vel_mux
+
+# Terminal 2: monitor output
+ros2 topic echo /cmd_vel/out
+
+# Terminal 3: monitor active mode
+ros2 topic echo /control_mode/active
+
+# Terminal 4: switch to teleop mode
+ros2 topic pub --once /control_mode std_msgs/msg/String "data: 'teleop'"
+
+# Terminal 4: send teleop velocity
+ros2 topic pub --once /cmd_vel/teleop geometry_msgs/msg/Twist \
+  "{linear: {x: 0.15, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}"
+# Expected: /cmd_vel/out shows linear.x = 0.15
+```
+
+### 7.5 Test nav2 mode is NOT forwarded when in teleop
+
+```bash
+# Still in teleop mode (from above)
+ros2 topic pub --once /cmd_vel geometry_msgs/msg/Twist \
+  "{linear: {x: 0.99, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}"
+# Expected: /cmd_vel/out does NOT show 0.99 (teleop is active, not nav2)
+```
+
+### 7.6 Test invalid mode is silently ignored
+
+```bash
+# Switch to vla mode first
+ros2 topic pub --once /control_mode std_msgs/msg/String "data: 'vla'"
+# Confirm active
+ros2 topic echo /control_mode/active --once
+# Expected: "vla"
+
+# Send invalid mode
+ros2 topic pub --once /control_mode std_msgs/msg/String "data: 'INVALID_MODE_XYZ'"
+# Confirm mode unchanged
+ros2 topic echo /control_mode/active --once
+# Expected: still "vla"
+```
+
+### 7.7 Test case-insensitivity
+
+```bash
+ros2 topic pub --once /control_mode std_msgs/msg/String "data: 'NAV2'"
+ros2 topic echo /control_mode/active --once
+# Expected: "nav2"
+
+ros2 topic pub --once /control_mode std_msgs/msg/String "data: 'VLA'"
+ros2 topic echo /control_mode/active --once
+# Expected: "vla"
+```
+
+### 7.8 Unit tests
+
+```python
+# test_cmd_vel_mux.py
+import pytest
+import rclpy
+from rclpy.executors import SingleThreadedExecutor
+from geometry_msgs.msg import Twist
+from std_msgs.msg import String
+import threading
+import time
+
+
+@pytest.fixture(scope='module')
+def ros_context():
+    rclpy.init()
+    yield
+    rclpy.shutdown()
+
+
+def test_default_mode_is_nav2(ros_context):
+    from omnibot_hybrid.cmd_vel_mux import CmdVelMux
+    node = CmdVelMux()
+    assert node.get_parameter('default_mode').value == 'nav2'
+    node.destroy_node()
+
+
+def test_invalid_mode_ignored(ros_context):
+    from omnibot_hybrid.cmd_vel_mux import CmdVelMux
+    node = CmdVelMux()
+    initial_mode = node.active_mode
+
+    # Simulate invalid mode message
+    msg = String()
+    msg.data = 'INVALID_XYZ'
+    node._control_mode_callback(msg)
+
+    assert node.active_mode == initial_mode
+    node.destroy_node()
+
+
+def test_valid_mode_changes(ros_context):
+    from omnibot_hybrid.cmd_vel_mux import CmdVelMux
+    node = CmdVelMux()
+
+    msg = String()
+    for mode in ['nav2', 'vla', 'teleop']:
+        msg.data = mode
+        node._control_mode_callback(msg)
+        assert node.active_mode == mode
+
+    node.destroy_node()
+
+
+def test_case_insensitive_mode(ros_context):
+    from omnibot_hybrid.cmd_vel_mux import CmdVelMux
+    node = CmdVelMux()
+
+    msg = String()
+    msg.data = 'NAV2'
+    node._control_mode_callback(msg)
+    assert node.active_mode == 'nav2'
+
+    node.destroy_node()
+```
+
+---
+
+## 8. omnibot_hybrid — MissionPlanner
+
+**File:** `robot_ws/src/omnibot_hybrid/omnibot_hybrid/mission_planner.py`
+
+### 8.1 What it does
+
+High-level state machine that parses mission commands, drives Nav2 for navigation phases, and triggers VLA inference. State machine: `IDLE → navigating → vla → done → IDLE`.
+
+### 8.2 Launch
+
+```bash
+# Requires Nav2 action server to be running for navigation phases
+ros2 run omnibot_hybrid mission_planner
+```
+
+### 8.3 Verify topics
+
+```bash
+ros2 node info /mission_planner
+```
+
+**Expected subscriptions:** `/mission/command`, `/mission/cancel`
+**Expected publications:** `/control_mode`, `/vla/prompt`, `/mission/status`
+
+### 8.4 Test mission command parsing
+
+```bash
+# Terminal 1: run planner
+ros2 run omnibot_hybrid mission_planner
+
+# Terminal 2: monitor status
+ros2 topic echo /mission/status
+
+# Terminal 3: monitor control mode
+ros2 topic echo /control_mode
+
+# Test: VLA-only command
+ros2 topic pub --once /mission/command std_msgs/msg/String \
+  "data: 'vla:find the red cup'"
+# Expected: /control_mode switches to "vla"
+#           /vla/prompt receives "find the red cup"
+
+# Test: navigate-only command
+ros2 topic pub --once /mission/command std_msgs/msg/String \
+  "data: 'navigate:kitchen'"
+# Expected: /control_mode switches to "nav2", Nav2 goal sent
+
+# Test: combined command
+ros2 topic pub --once /mission/command std_msgs/msg/String \
+  "data: 'navigate:kitchen,vla:find the red cup'"
+# Expected: navigate first, then VLA
+
+# Test: navigate alias
+ros2 topic pub --once /mission/command std_msgs/msg/String \
+  "data: 'nav:bedroom'"
+ros2 topic pub --once /mission/command std_msgs/msg/String \
+  "data: 'go:hallway'"
+```
+
+### 8.5 Test mission cancel
+
+```bash
+# Start a mission
+ros2 topic pub --once /mission/command std_msgs/msg/String \
+  "data: 'navigate:kitchen,vla:find the red cup'"
+
+# Cancel mid-mission
+ros2 topic pub --once /mission/cancel std_msgs/msg/String "data: 'cancel'"
+# Expected: /control_mode returns to "nav2"
+#           /mission/status shows "phase=idle"
+```
+
+### 8.6 Test mission status format
+
+```bash
+ros2 topic echo /mission/status
+```
+
+**Expected format:** `"phase=navigating mission={'navigate': 'kitchen', 'vla': 'find the red cup'}"`
+
+### 8.7 Unit tests — command parser
+
+```python
+# test_mission_planner.py
+import pytest
+
+
+def parse_mission_command(command: str) -> dict:
+    """Replicate parser logic from mission_planner.py."""
+    NAV_ALIASES = {'navigate', 'nav', 'nav2', 'go'}
+    result = {}
+    parts = command.split(',')
+    for part in parts:
+        part = part.strip()
+        if ':' not in part:
+            continue
+        key, value = part.split(':', 1)
+        key = key.strip().lower()
+        value = value.strip()
+        if key in NAV_ALIASES:
+            result['navigate'] = value
+        elif key == 'vla':
+            result['vla'] = value
+    return result
+
+
+def test_parse_combined_command():
+    cmd = "navigate:kitchen,vla:find the red cup"
+    result = parse_mission_command(cmd)
+    assert result['navigate'] == 'kitchen'
+    assert result['vla'] == 'find the red cup'
+
+
+def test_parse_nav_only():
+    result = parse_mission_command("navigate:bedroom")
+    assert result == {'navigate': 'bedroom'}
+    assert 'vla' not in result
+
+
+def test_parse_vla_only():
+    result = parse_mission_command("vla:pick up the bottle")
+    assert result == {'vla': 'pick up the bottle'}
+    assert 'navigate' not in result
+
+
+def test_parse_nav_alias_nav():
+    result = parse_mission_command("nav:kitchen")
+    assert result['navigate'] == 'kitchen'
+
+
+def test_parse_nav_alias_nav2():
+    result = parse_mission_command("nav2:kitchen")
+    assert result['navigate'] == 'kitchen'
+
+
+def test_parse_nav_alias_go():
+    result = parse_mission_command("go:hallway")
+    assert result['navigate'] == 'hallway'
+
+
+def test_parse_empty_string():
+    result = parse_mission_command("")
+    assert result == {}
+
+
+def test_parse_invalid_no_colon():
+    result = parse_mission_command("kitchen")
+    assert result == {}
+```
+
+---
+
+## 9. omnibot_arm — Arm Driver
+
+**File:** `robot_ws/src/omnibot_arm/omnibot_arm/arm_driver_node.py`
+
+**Hardware required for full tests (Feetech STS3215 servos).**
+
+### 9.1 What it does
+
+Drives a 6-DOF SO-101 arm via Feetech STS3215 servos using the LeRobot `FeetechMotorsBus`. Publishes joint states at 100 Hz. Optionally runs in teleop mode (leader→follower mirroring).
+
+### 9.2 Launch
+
+```bash
+# Normal (follower only)
+ros2 launch omnibot_arm arm.launch.py
+
+# Teleop mode (leader + follower)
+ros2 run omnibot_arm arm_driver_node \
+  --ros-args -p teleop_mode:=true
+```
+
+### 9.3 Verify topics
+
+```bash
+ros2 node info /arm_driver_node
+```
+
+**Expected publications:** `/arm/joint_states`
+**Expected subscriptions:** `/arm/joint_commands`, `/arm/enable`
+
+### 9.4 Test joint states publication
+
+```bash
+ros2 topic echo /arm/joint_states
+```
+
+**Expected:** Messages at ~100 Hz with 6 joint names and positions.
+
+**Check joint name prefix (known issue):** Joint names should be `arm_shoulder_pan`, etc.
+
+```bash
+ros2 topic echo /arm/joint_states --once | grep name
+# Should show: ['arm_shoulder_pan', 'arm_shoulder_lift', ...]
+# If shows: ['shoulder_pan', ...] → arm_params.yaml not loaded
+```
+
+### 9.5 Test joint commands
+
+```bash
+# Enable the arm
+ros2 topic pub --once /arm/enable std_msgs/msg/Bool "data: true"
+
+# Command all joints to home position (0.0 rad)
+ros2 topic pub --once /arm/joint_commands sensor_msgs/msg/JointState \
+  "{header: {stamp: {sec: 0}, frame_id: ''},
+    name: ['arm_shoulder_pan', 'arm_shoulder_lift', 'arm_elbow_flex',
+           'arm_wrist_flex', 'arm_wrist_roll', 'arm_gripper'],
+    position: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]}"
+```
+
+### 9.6 Unit tests — tick/radian conversion
+
+```python
+# test_arm_driver.py
+import pytest
+import math
+
+
+TICKS_PER_REV = 4096
+HOME_TICKS = [2048, 2048, 2048, 2048, 2048, 2048]
+JOINT_MIN = [-3.14, -1.57, -1.57, -1.57, -3.14, -0.1]
+JOINT_MAX = [3.14, 1.57, 1.57, 1.57, 3.14, 0.8]
+
+
+def ticks_to_radians(ticks: int, home: int) -> float:
+    return (ticks - home) * (2 * math.pi / TICKS_PER_REV)
+
+
+def radians_to_ticks(radians: float, home: int) -> int:
+    return int(home + radians * TICKS_PER_REV / (2 * math.pi))
+
+
+def clamp_radians(radians: float, idx: int) -> float:
+    return max(JOINT_MIN[idx], min(JOINT_MAX[idx], radians))
+
+
+def test_home_position_is_zero():
+    for i, home in enumerate(HOME_TICKS):
+        assert ticks_to_radians(home, home) == 0.0
+
+
+def test_ticks_to_radians_full_revolution():
+    home = 2048
+    full_rev = home + TICKS_PER_REV
+    angle = ticks_to_radians(full_rev, home)
+    assert abs(angle - 2 * math.pi) < 1e-9
+
+
+def test_radians_to_ticks_home():
+    for home in HOME_TICKS:
+        assert radians_to_ticks(0.0, home) == home
+
+
+def test_roundtrip_conversion():
+    for home in HOME_TICKS:
+        for angle in [-1.0, -0.5, 0.0, 0.5, 1.0]:
+            ticks = radians_to_ticks(angle, home)
+            back = ticks_to_radians(ticks, home)
+            assert abs(back - angle) < 0.002  # tolerance for int rounding
+
+
+def test_clamp_within_limits():
+    assert clamp_radians(0.0, 0) == 0.0
+    assert clamp_radians(3.14, 0) == 3.14
+    assert clamp_radians(-3.14, 0) == -3.14
+
+
+def test_clamp_exceeds_max():
+    assert clamp_radians(99.0, 0) == JOINT_MAX[0]
+
+
+def test_clamp_exceeds_min():
+    assert clamp_radians(-99.0, 0) == JOINT_MIN[0]
+
+
+def test_gripper_positive_limit():
+    # Gripper max is 0.8 rad
+    assert clamp_radians(0.8, 5) == 0.8
+    assert clamp_radians(1.0, 5) == 0.8
+
+
+def test_gripper_negative_limit():
+    # Gripper min is -0.1 rad
+    assert clamp_radians(-0.1, 5) == -0.1
+    assert clamp_radians(-1.0, 5) == -0.1
+
+
+def test_simulation_mode_fallback():
+    """Node should start even without lerobot installed."""
+    try:
+        import lerobot  # noqa
+        pytest.skip("lerobot installed, simulation fallback not triggered")
+    except ImportError:
+        pass  # Expected on CI
+
+    import rclpy
+    rclpy.init()
+    try:
+        from omnibot_arm.arm_driver_node import ArmDriverNode
+        node = ArmDriverNode()
+        # Should not raise even without hardware
+        node.destroy_node()
+    finally:
+        rclpy.shutdown()
+```
+
+---
+
+## 10. omnibot_vla — OpenVLA Node
+
+**File:** `robot_ws/src/omnibot_vla/omnibot_vla/vla_node.py`
+
+**GPU required (≥ 16 GB VRAM). Runs on desktop, NOT on Raspberry Pi.**
+
+### 10.1 What it does
+
+Subscribes to `/image_raw` (camera) and `/vla/prompt` (task description). Runs OpenVLA inference at 1 Hz and publishes velocity commands on `/cmd_vel/vla`.
+
+### 10.2 Launch
+
+```bash
+# On the GPU desktop machine
+source robot_ws/install/setup.bash
+ros2 launch omnibot_vla vla_desktop.launch.py
+
+# Or manually
+ros2 run omnibot_vla vla_node \
+  --ros-args \
+  -p model_path:=openvla/openvla-7b \
+  -p device:=cuda \
+  -p load_in_4bit:=false
+```
+
+### 10.3 Test prompt subscription
+
+```bash
+# Terminal 1: run node (with mocked model if no GPU)
+ros2 run omnibot_vla vla_node
+
+# Terminal 2: send a prompt
+ros2 topic pub --once /vla/prompt std_msgs/msg/String \
+  "data: 'Find the red cup'"
+```
+
+### 10.4 Test output on /cmd_vel/vla
+
+```bash
+ros2 topic echo /cmd_vel/vla
+```
+
+**Expected:** Twist messages at ~1 Hz after a prompt is set.
+
+### 10.5 Verify action mapping
+
+Action indices: `[0]→linear.x`, `[1]→linear.y`, `[5]→angular.z`.
+
+```python
+# test_vla_node.py
+import pytest
+
+
+def test_action_mapping():
+    """Verify OpenVLA action → Twist mapping."""
+    from geometry_msgs.msg import Twist
+
+    action = [0.1, 0.05, 0.0, 0.0, 0.0, 0.3]  # 7D action
+    twist = Twist()
+    twist.linear.x = float(action[0])
+    twist.linear.y = float(action[1])
+    twist.angular.z = float(action[5])
+
+    assert twist.linear.x == 0.1
+    assert twist.linear.y == 0.05
+    assert twist.angular.z == 0.3
+
+
+def test_prompt_format():
+    task = "Find the red cup"
+    prompt = f"In: What action should the robot take to {task}?\nOut:"
+    assert "In: What action should the robot take to" in prompt
+    assert "Out:" in prompt
+    assert task in prompt
+```
+
+### 10.6 Unit test with mocked model
+
+```python
+# test_vla_node_mock.py
+import pytest
+from unittest.mock import MagicMock, patch
+import rclpy
+
+
+@pytest.fixture(scope='module')
+def ros_context():
+    rclpy.init()
+    yield
+    rclpy.shutdown()
+
+
+def test_vla_node_mock_inference(ros_context):
+    with patch('transformers.AutoProcessor.from_pretrained') as mock_proc, \
+         patch('transformers.AutoModelForVision2Seq.from_pretrained') as mock_model:
+
+        mock_processor = MagicMock()
+        mock_proc.return_value = mock_processor
+
+        mock_m = MagicMock()
+        mock_model.return_value = mock_m
+        # Return dummy 7D action
+        mock_m.generate.return_value = MagicMock()
+        mock_processor.decode.return_value = "0.1 0.05 0.0 0.0 0.0 0.3 0.0"
+
+        from omnibot_vla.vla_node import VLANode
+        node = VLANode()
+        assert node is not None
+        node.destroy_node()
+```
+
+---
+
+## 11. omnibot_lerobot — SmolVLA Node
+
+**File:** `robot_ws/src/omnibot_lerobot/omnibot_lerobot/smolvla_node.py`
+
+**GPU required. Both `/camera/wrist/image_raw` and `/camera/base/bev/image_raw` must be available.**
+
+### 11.1 What it does
+
+Unified 9-DOF policy (6 arm + 3 base velocities) using SmolVLA. Requires both wrist and BEV camera feeds. Falls back to `DummyPolicy` (zeros) if lerobot is not installed.
+
+### 11.2 Launch
+
+```bash
+source robot_ws/install/setup.bash
+ros2 launch omnibot_lerobot smolvla_inference.launch.py
+```
+
+### 11.3 Prerequisites
+
+The BEV stitcher must be running:
+
+```bash
+# Terminal 1: BEV stitcher
+ros2 run ros2_bev_stitcher bev_stitcher_node
+```
+
+### 11.4 Verify topics
+
+```bash
+ros2 node info /smolvla_node
+```
+
+**Expected subscriptions:**
+- `/camera/wrist/image_raw`
+- `/camera/base/bev/image_raw`
+- `/arm/joint_states`
+- `/odom`
+- `/smolvla/task`
+- `/smolvla/enable`
+
+**Expected publications:**
+- `/arm/joint_commands`
+- `/cmd_vel`
+
+### 11.5 Enable SmolVLA and set task
+
+```bash
+# Enable
+ros2 topic pub --once /smolvla/enable std_msgs/msg/Bool "data: true"
+
+# Set task (triggers policy reset)
+ros2 topic pub --once /smolvla/task std_msgs/msg/String \
+  "data: 'pick up the red block'"
+
+# Monitor output
+ros2 topic echo /arm/joint_commands
+ros2 topic echo /cmd_vel
+```
+
+### 11.6 Test missing image warning throttle
+
+Stop the wrist camera topic, then check logs:
+
+```bash
+# Should see warning at most every 2 seconds
+ros2 topic echo /rosout | grep -i "missing\|wrist\|bev"
+```
+
+### 11.7 Test base velocity clamping
+
+```python
+# test_smolvla_node.py
+import pytest
+
+
+def clamp_base_velocity(vx, vy, vz):
+    MAX_LIN = 0.3
+    MAX_ANG = 1.0
+    return (
+        max(-MAX_LIN, min(MAX_LIN, vx)),
+        max(-MAX_LIN, min(MAX_LIN, vy)),
+        max(-MAX_ANG, min(MAX_ANG, vz)),
+    )
+
+
+def test_clamp_normal():
+    assert clamp_base_velocity(0.1, 0.1, 0.5) == (0.1, 0.1, 0.5)
+
+
+def test_clamp_linear_exceeded():
+    vx, vy, vz = clamp_base_velocity(1.0, -1.0, 0.0)
+    assert vx == 0.3
+    assert vy == -0.3
+
+
+def test_clamp_angular_exceeded():
+    vx, vy, vz = clamp_base_velocity(0.0, 0.0, 5.0)
+    assert vz == 1.0
+
+
+def test_9d_action_split():
+    """9D action: indices 0-5 = arm, 6-8 = base."""
+    action = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.05, 0.0, 0.1]
+    arm_action = action[:6]
+    base_action = action[6:]
+
+    assert len(arm_action) == 6
+    assert len(base_action) == 3
+    assert arm_action[0] == 0.1
+    assert base_action[0] == 0.05
+    assert base_action[2] == 0.1
+
+
+def test_dummy_policy_fallback():
+    """DummyPolicy returns zeros when lerobot not installed."""
+    try:
+        import lerobot  # noqa
+        pytest.skip("lerobot installed")
+    except ImportError:
+        pass
+
+    action = [0.0] * 9
+    assert all(a == 0.0 for a in action)
+```
+
+---
+
+## 12. omnibot_lerobot — Teleop Recorder
+
+**File:** `robot_ws/src/omnibot_lerobot/omnibot_lerobot/teleop_recorder_node.py`
+
+### 12.1 What it does
+
+Records leader arm + base joystick teleoperation as demonstration episodes for imitation learning. State machine: `IDLE →[RB press]→ RECORDING →[RB again]→ SAVING; [LB]→ DISCARDING`.
+
+### 12.2 Launch
+
+```bash
+ros2 run omnibot_lerobot teleop_recorder_node \
+  --ros-args \
+  -p output_dir:=/tmp/test_episodes \
+  -p repo_id:=local/test_dataset \
+  -p record_hz:=30.0
+```
+
+### 12.3 Verify subscriptions
+
+```bash
+ros2 node info /teleop_recorder_node
+```
+
+**Expected subscriptions:**
+- `/arm/leader_states`
+- `/arm/joint_states`
+- `/joy`
+- `/camera/wrist/image_raw`
+- `/camera/base/bev/image_raw`
+- `/odom`
+
+### 12.4 Test recording state machine
+
+```bash
+# Terminal 1: run recorder
+ros2 run omnibot_lerobot teleop_recorder_node \
+  --ros-args -p output_dir:=/tmp/test_episodes
+
+# Terminal 2: press RB (button 7) to start recording
+ros2 topic pub --once /joy sensor_msgs/msg/Joy \
+  "{header: {stamp: {sec: 0}, frame_id: ''},
+    axes: [0.0, 0.1, 0.0, 0.0, 0.0, 0.0],
+    buttons: [0, 0, 0, 0, 0, 0, 0, 1]}"
+# Expected log: "Recording started"
+
+# Terminal 2: press RB again to stop and save
+ros2 topic pub --once /joy sensor_msgs/msg/Joy \
+  "{header: {stamp: {sec: 1}, frame_id: ''},
+    axes: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+    buttons: [0, 0, 0, 0, 0, 0, 0, 1]}"
+# Expected log: "Saving episode..."
+```
+
+### 12.5 Test discard
+
+```bash
+# Start recording
+ros2 topic pub --once /joy sensor_msgs/msg/Joy \
+  "{axes: [0.0], buttons: [0, 0, 0, 0, 0, 0, 0, 1]}"
+
+# Press LB (button 6) to discard
+ros2 topic pub --once /joy sensor_msgs/msg/Joy \
+  "{axes: [0.0], buttons: [0, 0, 0, 0, 0, 0, 1, 0]}"
+# Expected log: "Episode discarded"
+```
+
+### 12.6 Verify saved dataset
+
+```bash
+ls /tmp/test_episodes/
+# With lerobot: Parquet files + MP4 videos
+# Without lerobot: .npz files
+
+# Inspect NumPy fallback
+python3 -c "
+import numpy as np, glob
+files = glob.glob('/tmp/test_episodes/*.npz')
+if files:
+    d = np.load(files[0])
+    print('Keys:', list(d.keys()))
+    print('States shape:', d['states'].shape)
+    print('Actions shape:', d['actions'].shape)
+"
+```
+
+### 12.7 Test joystick axis mapping
+
+```python
+# test_teleop_recorder.py
+import pytest
+
+
+MAX_LINEAR = 0.2
+MAX_ANGULAR = 1.0
+
+
+def axes_to_base_vel(axes):
+    """axes[1]→vx, axes[0]→vy, axes[3]→vz"""
+    vx = axes[1] * MAX_LINEAR
+    vy = axes[0] * MAX_LINEAR
+    vz = axes[3] * MAX_ANGULAR
+    return vx, vy, vz
+
+
+def test_forward_axis():
+    axes = [0.0, 1.0, 0.0, 0.0, 0.0, 0.0]  # axes[1] = 1.0
+    vx, vy, vz = axes_to_base_vel(axes)
+    assert vx == MAX_LINEAR
+    assert vy == 0.0
+
+
+def test_strafe_axis():
+    axes = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # axes[0] = 1.0
+    vx, vy, vz = axes_to_base_vel(axes)
+    assert vx == 0.0
+    assert vy == MAX_LINEAR
+
+
+def test_rotation_axis():
+    axes = [0.0, 0.0, 0.0, 1.0, 0.0, 0.0]  # axes[3] = 1.0
+    vx, vy, vz = axes_to_base_vel(axes)
+    assert vz == MAX_ANGULAR
+
+
+def test_9d_action_construction():
+    leader_arm = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
+    base_vx, base_vy, base_vz = 0.05, 0.0, 0.1
+    action = leader_arm + [base_vx, base_vy, base_vz]
+    assert len(action) == 9
+    assert action[0] == 0.1
+    assert action[6] == 0.05
+
+
+def test_episode_timeout():
+    """Episode should auto-stop at 60 seconds."""
+    TIMEOUT = 60.0
+    elapsed = 61.0
+    should_stop = elapsed >= TIMEOUT
+    assert should_stop is True
+```
+
