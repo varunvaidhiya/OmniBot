@@ -1520,3 +1520,567 @@ def test_episode_timeout():
     assert should_stop is True
 ```
 
+
+---
+
+## 13. omnibot_bringup — Launch Files
+
+### Launch commands
+
+```bash
+# Base robot (driver + state publisher)
+ros2 launch omnibot_bringup robot.launch.py
+
+# With Xbox controller
+ros2 launch omnibot_bringup robot_with_joy.launch.py
+
+# Teleop only
+ros2 launch omnibot_bringup joy_teleop.launch.py
+
+# Gazebo simulation (ROS_DOMAIN_ID=30)
+./launch_simulation.sh
+# or directly:
+ros2 launch omnibot_bringup simulation.launch.py
+
+# RViz only
+ros2 launch omnibot_bringup display.launch.py
+
+# Arm + base
+ros2 launch omnibot_bringup mobile_manipulation.launch.py
+```
+
+### Verify nodes launched
+
+```bash
+ros2 node list
+# Expected for robot.launch.py:
+#   /yahboom_controller_node
+#   /robot_state_publisher
+```
+
+### Test known parameter mismatch (Issue #1)
+
+```bash
+ros2 launch omnibot_bringup robot.launch.py --show-args
+# Look for: wheel_separation_x / wheel_separation_y
+# But node expects: wheel_separation_length / wheel_separation_width
+# Verify the node actually receives parameters:
+ros2 param get /yahboom_controller_node wheel_separation_length
+```
+
+### Xbox controller defaults
+
+| Setting | Value |
+|---------|-------|
+| Enable button | 5 (RB) |
+| Turbo button | 7 (RT) |
+| Linear scale | 0.125 m/s (0.25 m/s turbo) |
+| Angular scale | 0.25 rad/s (0.5 rad/s turbo) |
+| Deadzone | 0.1 |
+
+---
+
+## 14. omnibot_navigation — SLAM & Nav2
+
+### Launch commands
+
+```bash
+# Full autonomous (SLAM + Nav2 + state publisher)
+ros2 launch omnibot_navigation autonomous_robot.launch.py
+
+# SLAM mapping only
+ros2 launch omnibot_navigation slam_toolbox.launch.py
+
+# Nav2 only (map must already exist)
+ros2 launch omnibot_navigation autonomous_navigation.launch.py
+
+# Waypoint following
+ros2 launch omnibot_navigation autonomous_with_waypoints.launch.py
+
+# RTABMap alternative
+ros2 launch omnibot_navigation rtabmap.launch.py
+```
+
+### Verify Nav2 is running
+
+```bash
+ros2 node list | grep -E "nav2|slam|amcl|bt_navigator"
+ros2 action list | grep navigate
+# Expected: /navigate_to_pose
+```
+
+### Send a navigation goal
+
+```bash
+ros2 action send_goal /navigate_to_pose nav2_msgs/action/NavigateToPose \
+  "{pose: {header: {frame_id: 'map'},
+    pose: {position: {x: 1.0, y: 0.0, z: 0.0},
+           orientation: {w: 1.0}}}}"
+```
+
+### Verify AMCL uses OmnidirectionalMotionModel
+
+```bash
+cat robot_ws/src/omnibot_navigation/config/nav2_params.yaml | grep -A2 motion_model
+# Expected: robot_model_type: nav2_amcl::OmnidirectionalMotionModel
+```
+
+---
+
+## 15. omnibot_description — URDF
+
+```bash
+# Check URDF is valid
+cd robot_ws
+source install/setup.bash
+check_urdf src/omnibot_description/urdf/omnibot.urdf.xacro 2>/dev/null || \
+  xacro src/omnibot_description/urdf/omnibot.urdf.xacro > /tmp/omnibot.urdf && \
+  check_urdf /tmp/omnibot.urdf
+
+# View in RViz
+ros2 launch omnibot_bringup display.launch.py
+
+# Verify wheel geometry
+grep -E "wheel_sep|radius" src/omnibot_description/urdf/omnibot.urdf.xacro
+# Expected: X sep = 0.165m, Y sep = 0.215m, radius = 0.04m
+```
+
+---
+
+## 16. packages/yahboom_ros2 — Protocol Library
+
+```bash
+pip install -e packages/yahboom_ros2
+pytest packages/yahboom_ros2/tests/ -v
+```
+
+### Manual verification
+
+```python
+from yahboom_ros2.protocol import (
+    packet_motion, packet_beep, packet_set_car_type, packet_motor,
+    HEAD_TX, DEVICE_ID, HEAD_RX, CAR_TYPE_MECANUM_X3
+)
+
+# Verify constants
+assert HEAD_TX == 0xFF
+assert DEVICE_ID == 0xFC
+assert HEAD_RX == 0xFB
+assert CAR_TYPE_MECANUM_X3 == 1
+
+# Build and verify motion packet
+pkt = packet_motion(vx=0.1, vy=0.0, vz=0.0)
+assert pkt[0] == 0xFF
+assert pkt[1] == 0xFC
+# Verify checksum: (sum(packet_without_cs) + 5) & 0xFF
+assert pkt[-1] == (sum(pkt[:-1]) + 5) & 0xFF
+
+# Beep packet
+pkt = packet_beep(500)
+assert pkt[3] == 0x02  # FUNC_BEEP
+
+# Set car type
+pkt = packet_set_car_type(1)
+assert pkt[3] == 0x15  # FUNC_SET_CAR_TYPE
+assert pkt[4] == 1
+
+print("All protocol checks passed")
+```
+
+---
+
+## 17. packages/ros2_bev_stitcher — BEV Node
+
+```bash
+pip install -e packages/ros2_bev_stitcher
+
+# Run with default tiled fallback (no calibration file needed)
+ros2 run ros2_bev_stitcher bev_stitcher_node
+
+# With calibration
+ros2 run ros2_bev_stitcher bev_stitcher_node \
+  --ros-args -p calibration_file:=/path/to/homography.npz
+
+# Calibration tool
+ros2 run ros2_bev_stitcher bev_calibrate
+```
+
+### Verify output
+
+```bash
+ros2 topic echo /camera/bev/image_raw --no-arr --once
+# Expected: Image message header + encoding info
+```
+
+### Test topics
+
+```bash
+ros2 node info /bev_stitcher_node
+# Subscriptions: /camera/front/image_raw, /camera/rear/image_raw,
+#                /camera/left/image_raw, /camera/right/image_raw
+# Publications:  /camera/bev/image_raw
+```
+
+---
+
+## 18. packages/vla_serve — FastAPI Server
+
+```bash
+pip install -e packages/vla_serve
+
+# Start server (no model auto-load)
+VLA_PORT=8000 python -m vla_serve.server
+
+# With auto-load
+VLA_AUTO_LOAD=1 VLA_MODEL_PATH=openvla/openvla-7b python -m vla_serve.server
+```
+
+### Test endpoints
+
+```bash
+# Health check
+curl http://localhost:8000/health
+# Expected: {"status": "ok", "model_loaded": false}
+
+# Load model
+curl -X POST "http://localhost:8000/load_model?model_path=openvla/openvla-7b&load_4bit=false"
+
+# Predict (requires base64 image)
+python3 -c "
+import base64, requests
+from PIL import Image
+import io, numpy as np
+
+img = Image.fromarray(np.zeros((240, 320, 3), dtype=np.uint8))
+buf = io.BytesIO()
+img.save(buf, format='JPEG')
+b64 = base64.b64encode(buf.getvalue()).decode()
+
+resp = requests.post('http://localhost:8000/predict',
+    json={'image_base64': b64, 'instruction': 'pick up the cup'})
+print(resp.json())
+"
+```
+
+---
+
+## 19. packages/robot_episode_dataset — Dataset Utilities
+
+```bash
+pip install -e packages/robot_episode_dataset
+pytest packages/robot_episode_dataset/tests/ -v
+```
+
+### Test TopicSynchronizer
+
+```python
+from robot_episode_dataset.sync import TopicSynchronizer
+
+sync = TopicSynchronizer(topics=['camera', 'state', 'action'],
+                         sync_tolerance=0.05)
+
+# Add messages at different timestamps
+sync.add('camera', t=0.00, data='img0')
+sync.add('state',  t=0.01, data='st0')
+sync.add('action', t=0.02, data='ac0')  # within 0.05s → synced
+
+result = sync.get_synced()
+assert result is not None
+assert 'camera' in result
+```
+
+---
+
+## 20. vla_engine — OpenVLA Model & Server
+
+```bash
+cd vla_engine
+pip install -e .
+
+# Run existing tests
+pytest tests/ -v
+```
+
+### Existing test coverage
+
+```bash
+pytest tests/test_server.py -v
+# Tests:
+#   test_health_check       — GET /health returns 200
+#   test_predict_endpoint   — POST /predict with mocked model
+#   test_load_model_endpoint — POST /load_model
+```
+
+### Manual model test (requires GPU)
+
+```python
+from vla_engine.models.openvla import OpenVLAModel
+model = OpenVLAModel()
+model.load_model('openvla/openvla-7b', load_in_4bit=False)
+
+import numpy as np
+from PIL import Image
+img = Image.fromarray(np.zeros((480, 640, 3), dtype=np.uint8))
+action = model.predict_action(img, "pick up the red cup")
+print("Action:", action)  # 7D array
+```
+
+---
+
+## 21. data_engine — Bag Ingestion Pipeline
+
+```bash
+cd data_engine
+pip install -e .
+
+# Run existing tests
+pytest tests/test_ingestion.py -v
+# Tests:
+#   test_synchronizer — 3-stream sync at different Hz
+```
+
+### CLI usage
+
+```bash
+python -m data_engine.ingestion.bag_to_omnibot \
+  --bag /path/to/recording.db3 \
+  --dataset /tmp/my_dataset \
+  --task "pick up the block" \
+  --fps 30
+```
+
+### Verify output structure
+
+```bash
+ls /tmp/my_dataset/
+# Expected:
+#   meta/info.json
+#   meta/tasks.jsonl
+#   meta/episodes.jsonl
+#   meta/stats.json
+#   data/chunk-000/episode_000000.parquet
+#   videos/chunk-000/.../episode_000000.mp4
+```
+
+### Verify Parquet schema
+
+```python
+import pandas as pd
+df = pd.read_parquet('/tmp/my_dataset/data/chunk-000/episode_000000.parquet')
+expected_cols = ['observation.state', 'action', 'timestamp',
+                 'frame_index', 'episode_index', 'index',
+                 'task_index', 'next.done']
+for col in expected_cols:
+    assert col in df.columns, f"Missing: {col}"
+print("Schema OK, shape:", df.shape)
+```
+
+---
+
+## 22. Android App
+
+**Requires Android Studio. No JVM unit tests for `RobotRepository` (singleton issue).**
+
+### Build
+
+```bash
+cd android_app
+./gradlew assembleDebug
+./gradlew test  # Run unit tests
+```
+
+### Test ROSBridge connection
+
+1. Start ROSBridge on robot: `ros2 launch rosbridge_server rosbridge_websocket_launch.xml`
+2. Open app → Settings → set IP to robot IP, port 9090
+3. Connect — status should show `CONNECTED`
+
+### Verify reconnect policy
+
+Disconnect the robot network mid-session. The app should attempt reconnection up to 5 times with exponential backoff (1s, 2s, 4s, 8s, 16s).
+
+### Test /cmd_vel publishing
+
+Move the virtual joystick. Monitor on robot:
+```bash
+ros2 topic echo /cmd_vel
+# Expected: Twist at 20 Hz, linear clamped to ±1.5 m/s, angular ±2.0 rad/s
+```
+
+### Test arm joint commands
+
+From the arm control UI, send commands. Monitor:
+```bash
+ros2 topic echo /arm/joint_commands
+# Expected joint names: arm_shoulder_pan, arm_shoulder_lift, ...
+```
+
+### Test camera view
+
+`CameraFragment` connects to `web_video_server`. Ensure it's running:
+```bash
+ros2 run web_video_server web_video_server
+```
+
+---
+
+## 23. Root-level Hardware Debug Scripts
+
+**All scripts require physical hardware and `/dev/ttyUSB0`.**
+
+```bash
+# Reference protocol implementation
+python confirmed_protocol.py
+
+# Slow forward crawl test
+python test_crawl.py
+
+# Scan car types
+python test_cartype_scan.py
+
+# Protocol movement (old FF FB header)
+python test_protocol_move.py
+
+# Direct motor PWM
+python test_motor_direct.py
+
+# Safe ramping on port 2
+python test_safe_ramp_port2.py
+
+# Diagonal + spin
+python test_diagonal_spin.py
+
+# Idle stress test
+python test_idle_stress.py
+
+# Single motion command
+python test_motion_single.py
+
+# Repeated motion stress
+python test_motion_stress.py
+
+# General movement
+python test_movement.py
+
+# Diagonal motion
+python test_diagonal.py
+
+# Gentle ramp
+python test_gentle_ramp.py
+
+# Driver test
+python test_driver.py
+
+# Configure + test combined
+python configure_and_test.py
+```
+
+> Note: `test_protocol_move.py` uses the old `FF FB` header being replaced by `FF FC`. Do not use it as reference for new code.
+
+---
+
+## 24. Known Issues Verification
+
+### Issue 1 — robot.launch.py parameter names
+
+```bash
+# Check what launch file passes
+grep -n "wheel_separation" robot_ws/src/omnibot_bringup/launch/robot.launch.py
+# Likely shows: wheel_separation_x / wheel_separation_y
+
+# Check what node expects
+grep -n "wheel_separation" robot_ws/src/omnibot_driver/omnibot_driver/yahboom_controller_node.py
+# Should show: wheel_separation_length / wheel_separation_width
+
+# Fix: align the names in robot.launch.py to match the node parameter declarations
+```
+
+### Issue 2 — Arm joint name prefix
+
+```bash
+ros2 topic echo /arm/joint_states --once | grep name
+# INCORRECT: ['shoulder_pan', 'shoulder_lift', ...]
+# CORRECT:   ['arm_shoulder_pan', 'arm_shoulder_lift', ...]
+
+# Fix: ensure arm_params.yaml is loaded with prefixed names
+grep joint_names robot_ws/src/omnibot_arm/config/arm_params.yaml
+```
+
+### Issue 3 — Emergency stop not wired
+
+```bash
+ros2 topic pub --once /emergency_stop std_msgs/msg/Bool "data: true"
+# Verify no node is subscribed:
+ros2 topic info /emergency_stop
+# Expected: 1 publisher (Android), 0 subscribers — BUG
+```
+
+### Issue 4 — ROSBridge not in launch files
+
+```bash
+# ROSBridge must be started manually for Android app
+ros2 launch rosbridge_server rosbridge_websocket_launch.xml
+# or
+ros2 run rosbridge_server rosbridge_websocket
+
+# Verify Android can connect after starting it
+```
+
+### Issue 5 — BEV stitcher not in default launch
+
+```bash
+# smolvla_node requires /camera/base/bev/image_raw
+# but no default launch starts bev_stitcher_node
+ros2 topic info /camera/base/bev/image_raw
+# If no publisher: start stitcher manually
+ros2 run ros2_bev_stitcher bev_stitcher_node
+```
+
+### Issue 6 — Hardcoded debug log path
+
+```bash
+grep -n "yahboom_debug" \
+  robot_ws/src/omnibot_driver/omnibot_driver/yahboom_controller_node.py
+# Expected: /home/varunvaidhiya/yahboom_debug.log (fails silently on other machines)
+# Fix: use a ROS-standard log path or make it a parameter
+```
+
+---
+
+## 25. CI/CD Pipeline
+
+**File:** `.github/workflows/ros2_ci.yml`
+
+### What it runs
+
+1. Ubuntu 24.04 + ROS 2 Jazzy
+2. Clone `serial-ros2` via FetchContent
+3. `pip install numpy<2.0 torch opencv-python accelerate transformers`
+4. `rosdep install --from-paths robot_ws/src --ignore-src -y`
+5. `colcon build --symlink-install`
+6. `colcon test`
+7. `colcon test-result --verbose`
+
+### Run CI locally (act)
+
+```bash
+# Install act: https://github.com/nektos/act
+act -j build
+```
+
+### Known gaps
+
+| Gap | Status |
+|-----|--------|
+| Linting disabled in all `package.xml` | `ament_lint_auto` commented out |
+| No coverage threshold | `pytest --cov` not run |
+| No Gazebo integration tests | Not implemented |
+
+### Check CI status
+
+```bash
+gh workflow run ros2_ci.yml
+gh run list --workflow=ros2_ci.yml
+gh run view <run-id>
+```
+
