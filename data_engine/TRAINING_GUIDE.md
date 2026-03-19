@@ -26,34 +26,40 @@ State = **observation at time t**. Action = **command sent at time t** (arm join
 
 ## 1. Hardware Setup
 
-### 1.1 Camera Setup (Recommended)
+### 1.1 Camera Setup
 
-You need **two cameras** for bimanual / mobile manipulation:
+OmniBot has **6 cameras** fixed in the URDF. No additional setup needed beyond plugging them in.
 
+| # | Camera | Model | Topic | SmolVLA input? |
+|---|--------|-------|-------|----------------|
+| 1 | Front base | OV9732, 100° FOV | `/camera/front/image_raw` | Via BEV |
+| 2 | Rear base | OV9732, 100° FOV | `/camera/rear/image_raw` | Via BEV |
+| 3 | Left base | OV9732, 100° FOV | `/camera/left/image_raw` | Via BEV |
+| 4 | Right base | OV9732, 100° FOV | `/camera/right/image_raw` | Via BEV |
+| 5 | Depth | Orbbec Astra Pro | `/camera/depth/image_raw` `/camera/depth/points` | Nav2 only |
+| 6 | Wrist | OV9732, 100° FOV | `/camera/wrist/image_raw` | **Yes** (direct) |
+
+**BEV composite** (`/camera/base/bev/image_raw`): the 4 base cameras are stitched into a single 800×800 top-down image by `ros2_bev_stitcher`. This is what SmolVLA sees as its "environment" view.
+
+**SmolVLA uses:** BEV (global context) + wrist (grasp context). The depth camera feeds Nav2 costmap for obstacle avoidance, not the policy.
+
+**USB device assignment** (verify on your system with `ls /dev/video*`):
+
+| Camera | Device |
+|--------|--------|
+| Front | `/dev/video0` |
+| Rear | `/dev/video2` |
+| Left | `/dev/video4` |
+| Right | `/dev/video6` |
+| Wrist | `/dev/video8` |
+| Depth (Orbbec) | USB — auto-detected by `orbbec_camera` driver |
+
+**BEV calibration** — after mounting, run the calibration tool once to compute homography matrices per camera:
+```bash
+ros2 run ros2_bev_stitcher bev_calibrate
+# Follow on-screen prompts to select 4 ground-plane corners per camera
+# Saves calibration to ~/.ros/bev_calibration.yaml
 ```
-┌────────────────────────────────────────────────────────┐
-│  Camera 1 — Front (workspace overview)                 │
-│  • Logitech C920 / C270 (1080p / 720p)                 │
-│  • Mount: front of robot chassis, ~30° downward tilt   │
-│  • FOV: captures tabletop + arm workspace              │
-│  • Topic: /camera/front/image_raw (640×480, 30 fps)    │
-├────────────────────────────────────────────────────────┤
-│  Camera 2 — Wrist (end-effector view)                  │
-│  • Logitech C270 or any small USB cam                  │
-│  • Mount: link_5 (wrist) of SO-101 arm                 │
-│  • FOV: gripper + object close-up                      │
-│  • Topic: /camera/wrist/image_raw (320×240, 30 fps)    │
-└────────────────────────────────────────────────────────┘
-```
-
-**Why two cameras?**
-- Front camera gives global context (where is the object, where is the robot).
-- Wrist camera gives precise grasp context. SmolVLA uses both as separate visual tokens.
-
-**Mounting tips:**
-- Front cam: fixed bracket on robot front panel, at ~0.3 m height, angled down ~30°.
-- Wrist cam: 3D-print a bracket that clamps to SO-101 link_5. Cable-tie the USB cable along the arm. Keep camera mass < 50 g.
-- Avoid backlighting — task area lighting matters more than camera quality.
 
 ### 1.2 Teleop Hardware
 

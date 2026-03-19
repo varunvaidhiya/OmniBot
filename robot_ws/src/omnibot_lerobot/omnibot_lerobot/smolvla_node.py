@@ -11,8 +11,9 @@ Unified 9D action space: [shoulder_pan, shoulder_lift, elbow_flex,
                            base_vx, base_vy, base_vz]
 
 Topics subscribed:
-  /camera/wrist/image_raw        (sensor_msgs/Image)
-  /camera/base/bev/image_raw     (sensor_msgs/Image)  — BEV mosaic from 4 base cameras
+  /camera/wrist/image_raw        (sensor_msgs/Image)   — OV9732 on gripper
+  /camera/base/bev/image_raw     (sensor_msgs/Image)   — BEV mosaic from 4 base cameras
+  /camera/depth/image_raw        (sensor_msgs/Image)   — Orbbec Astra Pro (rear, optional)
   /arm/joint_states              (sensor_msgs/JointState)
   /odom                          (nav_msgs/Odometry)
   /smolvla/task                  (std_msgs/String)
@@ -120,11 +121,15 @@ class SmolVLANode(Node):
         # ------------------------------------------------------------------
         # State
         # ------------------------------------------------------------------
+        self.declare_parameter('use_depth', False)
+        self.use_depth = self.get_parameter('use_depth').value
+
         self.enabled = False
         self.wrist_image = None   # numpy HxWx3 uint8
-        self.bev_image = None     # numpy HxWx3 uint8 — BEV mosaic from 4 base cameras
+        self.bev_image   = None   # numpy HxWx3 uint8 — BEV mosaic from 4 base cameras
+        self.depth_image = None   # numpy HxWx3 uint8 — Orbbec Astra Pro (optional)
         self.arm_positions = np.zeros(6, dtype=np.float32)
-        self.base_vel = np.zeros(3, dtype=np.float32)
+        self.base_vel      = np.zeros(3, dtype=np.float32)
 
         # ------------------------------------------------------------------
         # cv_bridge
@@ -169,6 +174,10 @@ class SmolVLANode(Node):
             Image, '/camera/wrist/image_raw', self.wrist_image_cb, 10)
         self.create_subscription(
             Image, '/camera/base/bev/image_raw', self.bev_image_cb, 10)
+        # Orbbec Astra Pro — optional, enabled by use_depth parameter
+        if self.use_depth:
+            self.create_subscription(
+                Image, '/camera/depth/image_raw', self.depth_image_cb, 10)
         self.create_subscription(
             JointState, '/arm/joint_states', self.arm_state_cb, 10)
         self.create_subscription(
@@ -259,6 +268,9 @@ class SmolVLANode(Node):
 
     def bev_image_cb(self, msg: Image):
         self.bev_image = self._ros_image_to_numpy(msg)
+
+    def depth_image_cb(self, msg: Image):
+        self.depth_image = self._ros_image_to_numpy(msg)
 
     def arm_state_cb(self, msg: JointState):
         name_to_pos = dict(zip(msg.name, msg.position))

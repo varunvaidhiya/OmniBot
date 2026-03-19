@@ -99,7 +99,40 @@ def generate_launch_description():
     )
 
     # ------------------------------------------------------------------
-    # 8. BEV stitcher — combines 4 base cameras into one top-down image
+    # 8. Orbbec Astra Pro depth camera — rear-facing on top plate
+    #    ROS 2 driver: https://github.com/orbbec/OrbbecSDK_ROS2
+    #    Topics published: /camera/depth/image_raw, /camera/depth/camera_info,
+    #                      /camera/color/image_raw, /camera/depth/points
+    # ------------------------------------------------------------------
+    orbbec_camera_node = Node(
+        package='orbbec_camera',
+        executable='orbbec_camera_node',
+        name='orbbec_astra_pro',
+        output='screen',
+        parameters=[{
+            'camera_name':          'depth',
+            'depth_registration':   True,
+            'enable_point_cloud':   True,
+            'point_cloud_qos':      'default',
+            'depth_width':          640,
+            'depth_height':         480,
+            'depth_fps':            30,
+            'color_width':          640,
+            'color_height':         480,
+            'color_fps':            30,
+            'depth_optical_frame':  'depth_camera_optical_frame',
+            'color_optical_frame':  'depth_camera_optical_frame',
+        }],
+        remappings=[
+            ('depth/image_raw',    '/camera/depth/image_raw'),
+            ('depth/camera_info',  '/camera/depth/camera_info'),
+            ('color/image_raw',    '/camera/depth/color/image_raw'),
+            ('depth/points',       '/camera/depth/points'),
+        ],
+    )
+
+    # ------------------------------------------------------------------
+    # 9. BEV stitcher — combines 4 base cameras into one top-down image
     # ------------------------------------------------------------------
     bev_stitcher_node = Node(
         package='omnibot_lerobot',
@@ -107,12 +140,12 @@ def generate_launch_description():
         name='bev_stitcher_node',
         output='screen',
         parameters=[{
-            'canvas_size': 800,
-            'output_width': 800,
+            'canvas_size':   800,
+            'output_width':  800,
             'output_height': 800,
-            'src_width': 640,
-            'src_height': 480,
-            'publish_hz': 30.0,
+            'src_width':     640,
+            'src_height':    480,
+            'publish_hz':    30.0,
         }],
     )
 
@@ -124,5 +157,6 @@ def generate_launch_description():
         left_camera_node,
         right_camera_node,
         wrist_camera_node,
+        orbbec_camera_node,
         bev_stitcher_node,
     ])

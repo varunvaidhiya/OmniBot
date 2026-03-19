@@ -82,6 +82,7 @@ class CameraConfig:
     def width(self) -> int:
         return self.resolution[1]
 
+# ── Base cameras (4× OV9732, 100° FOV, on bottom plate edges) ────────────────
 CAMERA_FRONT = CameraConfig(
     name='front',
     topic='/camera/front/image_raw',
@@ -89,20 +90,63 @@ CAMERA_FRONT = CameraConfig(
     fps=30,
     encoding='bgr8',
 )
-
-CAMERA_WRIST = CameraConfig(
-    name='wrist',
-    topic='/camera/wrist/image_raw',
-    resolution=(240, 320),
+CAMERA_REAR = CameraConfig(
+    name='rear',
+    topic='/camera/rear/image_raw',
+    resolution=(480, 640),
+    fps=30,
+    encoding='bgr8',
+)
+CAMERA_LEFT = CameraConfig(
+    name='left',
+    topic='/camera/left/image_raw',
+    resolution=(480, 640),
+    fps=30,
+    encoding='bgr8',
+)
+CAMERA_RIGHT = CameraConfig(
+    name='right',
+    topic='/camera/right/image_raw',
+    resolution=(480, 640),
     fps=30,
     encoding='bgr8',
 )
 
-ALL_CAMERAS = [CAMERA_FRONT, CAMERA_WRIST]
+# ── BEV composite (ros2_bev_stitcher output) ──────────────────────────────────
+CAMERA_BEV = CameraConfig(
+    name='bev',
+    topic='/camera/base/bev/image_raw',
+    resolution=(800, 800),
+    fps=30,
+    encoding='bgr8',
+)
 
-# LeRobot feature key → CameraConfig mapping
+# ── Wrist camera (OV9732 on SO-101 gripper) ───────────────────────────────────
+CAMERA_WRIST = CameraConfig(
+    name='wrist',
+    topic='/camera/wrist/image_raw',
+    resolution=(480, 640),
+    fps=30,
+    encoding='bgr8',
+)
+
+# ── Orbbec Astra Pro — top plate, rear-facing, 12° down-tilt ─────────────────
+# Depth range: 0.6–8.0 m | FOV: 60°H × 49.5°V | 165×30×40 mm, 300 g
+CAMERA_DEPTH = CameraConfig(
+    name='depth',
+    topic='/camera/depth/image_raw',
+    resolution=(480, 640),
+    fps=30,
+    encoding='mono16',  # 16-bit depth in mm
+)
+
+BASE_CAMERAS  = [CAMERA_FRONT, CAMERA_REAR, CAMERA_LEFT, CAMERA_RIGHT]
+ALL_CAMERAS   = [CAMERA_FRONT, CAMERA_REAR, CAMERA_LEFT, CAMERA_RIGHT,
+                 CAMERA_BEV, CAMERA_WRIST, CAMERA_DEPTH]
+
+# LeRobot feature key → CameraConfig mapping (used in bag_to_omnibot.py)
 LEROBOT_CAMERA_KEYS = {
-    "observation.images.front": CAMERA_FRONT,
+    "observation.images.bev":   CAMERA_BEV,
     "observation.images.wrist": CAMERA_WRIST,
 }
 
