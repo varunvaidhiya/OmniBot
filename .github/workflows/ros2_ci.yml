@@ -7,10 +7,31 @@ on:
     branches: [ main ]
 
 jobs:
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Check formatting
+        run: ruff format --check --exclude robot_ws/src/omnibot_firmware .
+
+      - name: Check linting
+        run: ruff check --exclude robot_ws/src/omnibot_firmware .
+
   build_and_test:
     name: Build & Test (Jazzy)
     runs-on: ubuntu-24.04
-    
+    needs: lint
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -27,16 +48,11 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          # Install build tools and additional dependencies
           sudo apt-get install -y python3-colcon-common-extensions python3-rosdep python3-pip
-          pip3 install "numpy<2.0" torch opencv-python accelerate transformers --break-system-packages
-          
-          # Initialize rosdep
-          # sudo rosdep init # Already initialized by setup-ros
+          pip3 install "numpy<2.0" torch opencv-python accelerate transformers \
+                       pytest pytest-cov coverage --break-system-packages
+
           rosdep update
-          
-          # Install dependencies for the robot workspace
-          # We ignore src because we are building it
           rosdep install --from-paths robot_ws/src --ignore-src -y --rosdistro jazzy
 
       - name: Build Workspace
@@ -45,7 +61,7 @@ jobs:
           source /opt/ros/jazzy/setup.bash
           colcon build --symlink-install
 
-      - name: Run Tests
+      - name: Run ROS Tests
         working-directory: robot_ws
         run: |
           source /opt/ros/jazzy/setup.bash
@@ -55,3 +71,42 @@ jobs:
         working-directory: robot_ws
         run: |
           colcon test-result --verbose
+
+      - name: Run Python Package Tests with Coverage
+        run: |
+          pip3 install -e packages/yahboom_ros2 -e packages/vla_serve \
+                       -e packages/robot_episode_dataset --break-system-packages
+          pytest packages/ vla_engine/tests/ data_engine/tests/ \
+                 --cov=packages --cov=vla_engine --cov=data_engine \
+                 --cov-report=xml --cov-report=term-missing \
+                 --cov-fail-under=30 \
+                 -v
+
+      - name: Upload Coverage to Codecov
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
+
+  vla_serve_test:
+    name: vla_serve Tests
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install vla_serve
+        run: |
+          pip install -e packages/vla_serve httpx pytest pytest-cov
+
+      - name: Run vla_serve tests
+        run: |
+          pytest packages/vla_serve/ -v \
+                 --cov=packages/vla_serve \
+                 --cov-report=term-missing \
+                 --cov-fail-under=60

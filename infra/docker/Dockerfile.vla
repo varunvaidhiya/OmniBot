@@ -1,0 +1,20 @@
+FROM python:3.11-slim AS base
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir \
+    fastapi>=0.110 \
+    uvicorn>=0.29 \
+    pydantic>=2.0 \
+    pillow>=10.0 \
+    numpy"<2.0"
+
+COPY . /app/vla_serve
+RUN pip install --no-cache-dir -e /app/vla_serve
+
+# Optional: OpenVLA deps (large, only include if VLA_MODEL_CLASS uses them)
+# RUN pip install --no-cache-dir torch transformers accelerate bitsandbytes
+
+EXPOSE 8000
+
+CMD ["vla-serve"]

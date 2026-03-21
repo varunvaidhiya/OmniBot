@@ -1,0 +1,30 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.4
+    hooks:
+      - id: ruff
+        args: [--fix]
+        exclude: ^(robot_ws/src/omnibot_firmware|fuzz_.*\.py|scan_.*\.py)
+      - id: ruff-format
+        exclude: ^(robot_ws/src/omnibot_firmware|fuzz_.*\.py|scan_.*\.py)
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: check-merge-conflict
+      - id: debug-statements
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.10.0
+    hooks:
+      - id: mypy
+        files: ^packages/
+        additional_dependencies:
+          - fastapi
+          - pydantic>=2.0
+          - numpy

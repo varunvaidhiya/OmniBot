@@ -1,0 +1,100 @@
+# OmniBot full-stack Docker Compose
+#
+# Usage:
+#   cp .env.example .env       # fill in your IPs and API key
+#   docker compose up          # start everything
+#   docker compose up robot    # start only the robot stack
+#   docker compose up vla      # start only the VLA server
+#
+# Services:
+#   robot       — ROS 2 base stack (driver + SLAM + Nav2 + ROSBridge)
+#   vla         — FastAPI VLA inference server (requires NVIDIA GPU)
+#   rosbridge   — standalone ROSBridge WebSocket (if not using robot service)
+#
+# Hardware access: pass --privileged or individual device flags in .env.
+
+version: "3.9"
+
+x-ros-env: &ros-env
+  ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-30}
+  ROS_DISTRO: jazzy
+  RCUTILS_LOGGING_BUFFERED_STREAM: "1"
+
+services:
+
+  # ── Robot stack (Raspberry Pi 5 or development machine) ─────────────────
+  robot:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      target: dev
+    image: omnibot/robot:latest
+    network_mode: host
+    privileged: true                     # needed for serial + USB devices
+    volumes:
+      - .:/home/ros/workspace:cached
+      - /dev:/dev
+    environment:
+      <<: *ros-env
+      YAHBOOM_PORT: ${YAHBOOM_PORT:-/dev/ttyUSB0}
+    command: >
+      bash -c "
+        source /opt/ros/jazzy/setup.bash &&
+        cd /home/ros/workspace/robot_ws &&
+        colcon build --symlink-install --quiet &&
+        source install/setup.bash &&
+        ros2 launch omnibot_bringup robot.launch.py
+      "
+    restart: unless-stopped
+
+  # ── VLA inference server (Desktop GPU machine) ───────────────────────────
+  vla:
+    build:
+      context: packages/vla_serve
+      dockerfile: ../../infra/docker/Dockerfile.vla
+    image: omnibot/vla_serve:latest
+    ports:
+      - "${VLA_PORT:-8000}:8000"
+    environment:
+      VLA_MODEL_CLASS: ${VLA_MODEL_CLASS:-vla_serve.models.openvla.OpenVLAModel}
+      VLA_MODEL_PATH: ${VLA_MODEL_PATH:-openvla/openvla-7b}
+      VLA_LOAD_4BIT: ${VLA_LOAD_4BIT:-0}
+      VLA_AUTO_LOAD: ${VLA_AUTO_LOAD:-0}
+      VLA_PORT: "8000"
+      VLA_API_KEY: ${VLA_API_KEY:-}
+      VLA_RATE_LIMIT: ${VLA_RATE_LIMIT:-10}
+    volumes:
+      - vla_model_cache:/root/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  # ── Standalone ROSBridge (when robot service is not used) ────────────────
+  rosbridge:
+    image: osrf/ros:jazzy-ros-core
+    network_mode: host
+    environment:
+      <<: *ros-env
+    command: >
+      bash -c "
+        source /opt/ros/jazzy/setup.bash &&
+        ros2 launch rosbridge_server rosbridge_websocket_launch.xml port:=9090
+      "
+    restart: unless-stopped
+    profiles:
+      - standalone-bridge
+
+volumes:
+  vla_model_cache:
+    driver: local
