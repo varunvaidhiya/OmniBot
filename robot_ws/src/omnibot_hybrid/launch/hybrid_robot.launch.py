@@ -87,12 +87,12 @@ def generate_launch_description():
         name='yahboom_driver',
         output='screen',
         parameters=[{
-            'serial_port':        '/dev/ttyUSB0',
-            'baud_rate':          115200,
-            'wheel_separation_x': 0.165,
-            'wheel_separation_y': 0.215,
-            'wheel_radius':       0.04,
-            'use_sim_time':       use_sim_time,
+            'serial_port':             '/dev/ttyUSB0',
+            'baud_rate':               115200,
+            'wheel_separation_length': 0.165,
+            'wheel_separation_width':  0.215,
+            'wheel_radius':            0.04,
+            'use_sim_time':            use_sim_time,
         }],
         remappings=[('/cmd_vel', '/cmd_vel/out')],
     )

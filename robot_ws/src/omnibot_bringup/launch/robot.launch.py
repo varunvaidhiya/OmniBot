@@ -22,8 +22,8 @@ def generate_launch_description():
         parameters=[{
             'serial_port': '/dev/ttyUSB0',
             'baud_rate': 115200,
-            'wheel_separation_x': 0.165,
-            'wheel_separation_y': 0.215,
+            'wheel_separation_length': 0.165,
+            'wheel_separation_width': 0.215,
             'wheel_radius': 0.04
         }]
     )
