@@ -38,8 +38,9 @@
   <!-- Orbbec Astra Pro driver — build from source (not on apt):
        https://github.com/orbbec/ros2_astra_camera
        cd robot_ws/src && git clone https://github.com/orbbec/ros2_astra_camera
-       colcon build - -packages-select astra_camera -->
-  <exec_depend>astra_camera</exec_depend>
+       colcon build - -packages-select astra_camera
+       Not declared as exec_depend because it is not in the rosdep database
+       and must be built from source; rosdep install would fail otherwise. -->
 
   <!-- <test_depend>ament_lint_auto</test_depend> -->
   <!-- <test_depend>ament_lint_common</test_depend> -->
