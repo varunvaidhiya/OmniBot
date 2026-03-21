@@ -10,6 +10,7 @@ VLA_AUTO_LOAD     '1' to load model on startup (default: '0' — use /load_model
 """
 
 import importlib
+import logging
 import os
 import time
 from contextlib import asynccontextmanager
@@ -21,6 +22,13 @@ from fastapi import FastAPI, HTTPException
 from .schema import InferenceRequest, InferenceResponse
 from ..utils.image import decode_base64_image
 from ..models.base import VLAModel
+
+logger = logging.getLogger("vla_serve")
+
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
 
 # ---------------------------------------------------------------------------
 # Globals
@@ -46,13 +54,14 @@ async def lifespan(app: FastAPI):
     global _model
     cls = _get_model_class()
     _model = cls()
-    print(f'vla_serve: model class = {cls.__name__}')
+    logger.info("model class = %s", cls.__name__)
 
     if os.getenv('VLA_AUTO_LOAD', '0') == '1':
         model_path = os.getenv('VLA_MODEL_PATH', 'openvla/openvla-7b')
         load_4bit = os.getenv('VLA_LOAD_4BIT', '0') == '1'
-        print(f'Auto-loading {model_path} (4bit={load_4bit})...')
+        logger.info("auto-loading %s (4bit=%s)", model_path, load_4bit)
         _model.load_model(model_path=model_path, load_in_4bit=load_4bit)
+        logger.info("model loaded successfully")
 
     yield
 
