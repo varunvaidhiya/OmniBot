@@ -63,6 +63,23 @@ colcon build --symlink-install
 source install/setup.bash
 ```
 
+### Quick start with Docker Compose
+
+```bash
+cp .env.example .env          # fill in your IPs and optionally set VLA_API_KEY
+docker compose up robot       # starts ROS 2 stack + ROSBridge
+docker compose up vla         # starts VLA inference server (requires NVIDIA GPU)
+docker compose up             # starts everything
+```
+
+### Install pre-commit hooks
+
+```bash
+pip install pre-commit
+pre-commit install            # runs ruff + mypy on every commit
+pre-commit run --all-files    # check the whole repo right now
+```
+
 ### Run tests locally before pushing
 
 ```bash
@@ -71,11 +88,26 @@ cd robot_ws
 colcon test
 colcon test-result --verbose
 
-# VLA engine
+# Python packages with coverage
+pytest packages/ vla_engine/tests/ data_engine/tests/ \
+      --cov=packages --cov=vla_engine --cov=data_engine \
+      --cov-report=term-missing
+
+# VLA engine only
 cd vla_engine && pytest tests/ -v
 
-# Data engine
+# Data engine only
 cd data_engine && pytest tests/ -v
+```
+
+### vla_serve API key (local dev)
+
+Leave `VLA_API_KEY` empty in `.env` to disable authentication locally.
+Set it to a random 32-byte hex string for any shared or networked deployment:
+
+```bash
+openssl rand -hex 32   # generate a key
+# Add to .env: VLA_API_KEY=<output>
 ```
 
 The CI runs exactly these steps on every PR. A failing CI is a blocking issue.
