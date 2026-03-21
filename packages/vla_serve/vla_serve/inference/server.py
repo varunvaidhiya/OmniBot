@@ -7,17 +7,22 @@ VLA_MODEL_CLASS   Module path to model class (default: vla_serve.models.openvla.
 VLA_MODEL_PATH    HuggingFace model ID or local path (default: openvla/openvla-7b)
 VLA_LOAD_4BIT     '1' to enable 4-bit quantization (default: '0')
 VLA_AUTO_LOAD     '1' to load model on startup (default: '0' — use /load_model)
+VLA_API_KEY       API key required on /predict and /load_model (disabled if empty)
+VLA_RATE_LIMIT    Max requests/second per key on /predict (default: 10)
+LOG_LEVEL         Python logging level (default: INFO)
 """
 
 import importlib
 import logging
 import os
 import time
+from collections import defaultdict
 from contextlib import asynccontextmanager
 from typing import Optional
 
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.security.api_key import APIKeyHeader
 
 from .schema import InferenceRequest, InferenceResponse
 from ..utils.image import decode_base64_image
@@ -36,6 +41,10 @@ logging.basicConfig(
 
 _model: Optional[VLAModel] = None
 
+# Simple in-process token-bucket rate limiter: {api_key: (tokens, last_refill)}
+_rate_buckets: dict[str, tuple[float, float]] = defaultdict(lambda: (float(os.getenv("VLA_RATE_LIMIT", "10")), time.monotonic()))
+_RATE_LIMIT = float(os.getenv("VLA_RATE_LIMIT", "10"))  # requests per second
+
 
 def _get_model_class() -> type:
     cls_path = os.getenv(
@@ -43,6 +52,44 @@ def _get_model_class() -> type:
     module_path, cls_name = cls_path.rsplit('.', 1)
     module = importlib.import_module(module_path)
     return getattr(module, cls_name)
+
+
+# ---------------------------------------------------------------------------
+# Auth
+# ---------------------------------------------------------------------------
+
+_API_KEY: str = os.getenv("VLA_API_KEY", "")
+_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+def _require_api_key(api_key: Optional[str] = Depends(_api_key_header)) -> str:
+    """Dependency: validate X-API-Key header if VLA_API_KEY is configured."""
+    if not _API_KEY:
+        # Auth disabled — open access (development / local use)
+        return ""
+    if api_key != _API_KEY:
+        logger.warning("rejected request with invalid API key")
+        raise HTTPException(status_code=401, detail="Invalid or missing API key.")
+    return api_key
+
+
+def _check_rate_limit(key: str) -> None:
+    """Token-bucket rate limiter — raises HTTP 429 when exhausted."""
+    if not _API_KEY:
+        return  # rate limiting only applies when auth is enabled
+
+    now = time.monotonic()
+    tokens, last = _rate_buckets[key]
+    elapsed = now - last
+    tokens = min(_RATE_LIMIT, tokens + elapsed * _RATE_LIMIT)
+
+    if tokens < 1.0:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Rate limit exceeded. Max {_RATE_LIMIT:.0f} requests/second.",
+        )
+
+    _rate_buckets[key] = (tokens - 1.0, now)
 
 
 # ---------------------------------------------------------------------------
@@ -55,6 +102,8 @@ async def lifespan(app: FastAPI):
     cls = _get_model_class()
     _model = cls()
     logger.info("model class = %s", cls.__name__)
+    auth_status = "enabled" if _API_KEY else "DISABLED (set VLA_API_KEY to enable)"
+    logger.info("API key authentication: %s", auth_status)
 
     if os.getenv('VLA_AUTO_LOAD', '0') == '1':
         model_path = os.getenv('VLA_MODEL_PATH', 'openvla/openvla-7b')
@@ -83,6 +132,7 @@ app = FastAPI(
 
 @app.get('/health')
 def health():
+    """Health check — no auth required."""
     loaded = (_model is not None and
               getattr(_model, 'model', None) is not None)
     return {'status': 'ok', 'model_loaded': loaded}
@@ -92,18 +142,27 @@ def health():
 def load_model(
     model_path: str = 'openvla/openvla-7b',
     load_4bit: bool = False,
+    _key: str = Depends(_require_api_key),
 ):
     if _model is None:
         raise HTTPException(status_code=503, detail='Server not initialized.')
     try:
+        logger.info("loading model %s (4bit=%s)", model_path, load_4bit)
         _model.load_model(model_path=model_path, load_in_4bit=load_4bit)
+        logger.info("model %s loaded", model_path)
         return {'status': 'success', 'model': model_path}
     except Exception as exc:
+        logger.error("load_model failed: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc))
 
 
 @app.post('/predict', response_model=InferenceResponse)
-def predict(request: InferenceRequest):
+def predict(
+    request: InferenceRequest,
+    key: str = Depends(_require_api_key),
+):
+    _check_rate_limit(key or "anon")
+
     if _model is None or getattr(_model, 'model', None) is None:
         raise HTTPException(
             status_code=503,
@@ -114,13 +173,17 @@ def predict(request: InferenceRequest):
         result = _model.predict_action(image, request.instruction,
                                        **(request.config or {}))
         latency = (time.time() - t0) * 1000.0
+        logger.debug("inference latency=%.1f ms instruction=%r", latency, request.instruction)
         action = result if isinstance(result, dict) else {'vector': result}
         return InferenceResponse(
             action=action,
             raw_output=str(result),
             latency_ms=latency,
         )
+    except HTTPException:
+        raise
     except Exception as exc:
+        logger.error("predict failed: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc))
 
 
