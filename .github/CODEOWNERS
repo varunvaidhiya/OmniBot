@@ -1,0 +1,32 @@
+# CODEOWNERS
+# Each line maps a path pattern to the GitHub user(s) who own that area.
+# Owners are automatically requested for review on any PR that touches their paths.
+# Docs: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default: maintainer reviews everything
+*                                               @varunvaidhiya
+
+# Motor driver & serial protocol — core hardware path, must be reviewed carefully
+robot_ws/src/omnibot_driver/                    @varunvaidhiya
+packages/yahboom_ros2/                          @varunvaidhiya
+confirmed_protocol.py                          @varunvaidhiya
+
+# VLA inference — GPU-side code, breaking changes affect paper results
+vla_engine/                                     @varunvaidhiya
+packages/vla_serve/                             @varunvaidhiya
+robot_ws/src/omnibot_vla/                       @varunvaidhiya
+robot_ws/src/omnibot_lerobot/                   @varunvaidhiya
+
+# Data pipeline — changes here affect dataset compatibility and paper reproducibility
+data_engine/                                    @varunvaidhiya
+packages/robot_episode_dataset/                 @varunvaidhiya
+
+# Navigation stack
+robot_ws/src/omnibot_navigation/                @varunvaidhiya
+
+# Arm driver
+robot_ws/src/omnibot_arm/                       @varunvaidhiya
+
+# CI/CD — changes here affect every contributor
+.github/workflows/                              @varunvaidhiya
+infra/                                          @varunvaidhiya

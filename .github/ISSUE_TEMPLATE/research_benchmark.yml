@@ -1,0 +1,135 @@
+name: Research / Benchmark Proposal or Result
+description: Propose or report a benchmarking experiment on the OmniBot platform (for the paper).
+title: "[Bench] "
+labels: ["research", "benchmarking"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template to **propose** an experiment before running it, or to **report results** after. Both uses are valid — just be clear which stage you're at. Discuss proposals here before running long experiments to avoid duplicate work and keep results comparable.
+
+  - type: dropdown
+    id: stage
+    attributes:
+      label: Stage
+      options:
+        - Proposal (not yet run)
+        - In progress
+        - Results ready
+    validations:
+      required: true
+
+  - type: dropdown
+    id: model
+    attributes:
+      label: Model
+      options:
+        - SmolVLA (lerobot/smolvla_base)
+        - OpenVLA (openvla/openvla-7b)
+        - OpenVLA-OFT fine-tuned
+        - SmolVLA fine-tuned
+        - Custom / other
+    validations:
+      required: true
+
+  - type: input
+    id: model_checkpoint
+    attributes:
+      label: Model checkpoint or HuggingFace repo ID
+      placeholder: "e.g. lerobot/smolvla_base or alice/smolvla-omnibot-v1"
+
+  - type: textarea
+    id: task
+    attributes:
+      label: Task description
+      description: Describe the manipulation or navigation task precisely. Include object names, start/goal conditions, and any constraints.
+      placeholder: |
+        Pick-and-place: grasp a 5 cm red cube from a fixed position on a 60 cm table, place it in a white bin 30 cm away. Start pose is fixed. 3 distractors on table.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: metrics
+    attributes:
+      label: Metrics
+      description: Select all metrics you will / did measure.
+      options:
+        - label: Task success rate (%)
+        - label: Partial success rate (e.g. grasp success, placement success separately)
+        - label: Inference latency (ms per step)
+        - label: Trajectory smoothness (jerk, path length)
+        - label: Base displacement error
+        - label: Arm end-effector position error
+        - label: Number of collisions per episode
+        - label: Other (describe below)
+
+  - type: dropdown
+    id: hardware
+    attributes:
+      label: Hardware configuration
+      options:
+        - Real robot (Raspberry Pi 5 + Yahboom board + SO-101 arm)
+        - Real robot + GPU desktop (full distributed setup)
+        - Gazebo simulation only
+        - Simulation for training, real robot for eval
+    validations:
+      required: true
+
+  - type: input
+    id: n_demos
+    attributes:
+      label: Number of training demonstrations
+      placeholder: "e.g. 50"
+    validations:
+      required: true
+
+  - type: input
+    id: n_eval
+    attributes:
+      label: Number of evaluation episodes
+      placeholder: "e.g. 20"
+
+  - type: input
+    id: dataset_id
+    attributes:
+      label: Dataset repo ID (LeRobot format)
+      description: Leave blank if not collected yet.
+      placeholder: "e.g. alice/omnibot-pick-red-cube-50demos"
+
+  - type: textarea
+    id: results
+    attributes:
+      label: Results summary
+      description: |
+        Fill in after running the experiment. Use a markdown table.
+        Example:
+        | Metric | Value |
+        |---|---|
+        | Task success rate | 72% (14/20 episodes) |
+        | Grasp success | 85% |
+        | Mean inference latency | 98 ms |
+      placeholder: |
+        | Metric | Value |
+        |---|---|
+        | Task success rate | |
+        | Mean inference latency | |
+
+  - type: input
+    id: figures
+    attributes:
+      label: Link to figures or supplementary material
+      description: Google Drive folder, HuggingFace dataset viewer, Weights & Biases run, etc.
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes / observations
+      description: Failure modes, surprises, ideas for follow-up experiments.
+
+  - type: checkboxes
+    id: integrity
+    attributes:
+      label: Research integrity
+      options:
+        - label: I confirm that all reported results are from actual experiments and have not been fabricated, cherry-picked, or selectively reported to misrepresent performance.
+          required: true

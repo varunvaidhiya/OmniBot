@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: General questions & discussion
+    url: https://github.com/varunvaidhiya/Mecanum-Wheel-Robot/discussions
+    about: Ask questions, share ideas, discuss the project — not a bug or feature request.
+  - name: Contributor guide
+    url: https://github.com/varunvaidhiya/Mecanum-Wheel-Robot/blob/main/CONTRIBUTING.md
+    about: Read this before opening your first issue or PR.

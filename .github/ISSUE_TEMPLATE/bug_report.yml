@@ -1,0 +1,88 @@
+name: Bug Report
+description: Something is broken — hardware, ROS nodes, simulation, or the Android app.
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which part of the codebase is affected?
+      options:
+        - omnibot_driver (Yahboom serial driver / motor control)
+        - omnibot_navigation (Nav2 / SLAM / EKF)
+        - omnibot_vla (OpenVLA ROS 2 node)
+        - omnibot_arm (SO-101 arm driver)
+        - omnibot_hybrid (cmd_vel mux / mission planner)
+        - omnibot_lerobot (SmolVLA node / teleop recorder)
+        - omnibot_bringup (launch files)
+        - omnibot_description (URDF / meshes)
+        - packages/yahboom_ros2
+        - packages/vla_serve
+        - packages/robot_episode_dataset
+        - packages/ros2_bev_stitcher
+        - vla_engine
+        - data_engine
+        - android_app
+        - infra (Docker / CI)
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: hardware
+    attributes:
+      label: Hardware setup
+      options:
+        - Real robot (Raspberry Pi 5 + Yahboom board)
+        - Real robot + GPU desktop (full system)
+        - Gazebo simulation only
+        - No hardware — unit test / standalone package
+    validations:
+      required: true
+
+  - type: input
+    id: ros_distro
+    attributes:
+      label: ROS 2 distro & OS
+      placeholder: "e.g. Jazzy / Ubuntu 24.04"
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Launch with `ros2 launch omnibot_bringup robot.launch.py`
+        2. Publish to /cmd_vel ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Paste relevant terminal output or `ros2 topic echo` output. Collapses automatically.
+      render: shell
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context
+      description: Screenshots, URDF diffs, serial captures, anything else useful.
