@@ -59,6 +59,7 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.descriptions import ParameterValue
+from launch_ros.parameter_descriptions import ParameterFile
 
 
 def generate_launch_description():
@@ -71,11 +72,13 @@ def generate_launch_description():
         Command(['xacro ', xacro_file]), value_type=str)
 
     # ── Launch arguments ──────────────────────────────────────────────────────
-    use_sim_time = LaunchConfiguration('use_sim_time', default='false')
-    use_rviz     = LaunchConfiguration('use_rviz',     default='true')
-    use_slam     = LaunchConfiguration('use_slam',     default='true')
-    vla_device   = LaunchConfiguration('vla_device',   default='cuda')
-    vla_4bit     = LaunchConfiguration('vla_4bit',     default='false')
+    use_sim_time   = LaunchConfiguration('use_sim_time',   default='false')
+    use_rviz       = LaunchConfiguration('use_rviz',       default='true')
+    use_slam       = LaunchConfiguration('use_slam',       default='true')
+    vla_device     = LaunchConfiguration('vla_device',     default='cuda')
+    vla_4bit       = LaunchConfiguration('vla_4bit',       default='false')
+    use_rosbridge  = LaunchConfiguration('use_rosbridge',  default='true')
+    use_bev        = LaunchConfiguration('use_bev',        default='true')
 
     # ── Robot driver ──────────────────────────────────────────────────────────
     # Remapped: driver reads /cmd_vel/out (mux output) instead of /cmd_vel.
@@ -178,6 +181,28 @@ def generate_launch_description():
         parameters=[{'use_sim_time': use_sim_time}],
     )
 
+    # ── BEV stitcher (required by SmolVLA) ───────────────────────────────────
+    # Publishes /camera/base/bev/image_raw from 4 base-mounted cameras.
+    # Disable only if smolvla_node is not in use.
+    bev_stitcher_node = Node(
+        package='omnibot_lerobot',
+        executable='bev_stitcher_node',
+        name='bev_stitcher_node',
+        output='screen',
+        parameters=[{'use_sim_time': use_sim_time}],
+        condition=IfCondition(use_bev),
+    )
+
+    # ── ROSBridge WebSocket server ────────────────────────────────────────────
+    rosbridge_node = Node(
+        package='rosbridge_server',
+        executable='rosbridge_websocket',
+        name='rosbridge_websocket',
+        output='screen',
+        parameters=[{'port': 9090}],
+        condition=IfCondition(use_rosbridge),
+    )
+
     # ── RViz (optional) ───────────────────────────────────────────────────────
     rviz_config = os.path.join(
         pkg_description, 'config', 'omnibot_navigation.rviz')
@@ -208,6 +233,12 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'vla_4bit', default_value='false',
             description='Load VLA model in 4-bit quantisation (needs <16 GB VRAM)'),
+        DeclareLaunchArgument(
+            'use_rosbridge', default_value='true',
+            description='Start ROSBridge WebSocket server on port 9090 for Android app'),
+        DeclareLaunchArgument(
+            'use_bev', default_value='true',
+            description='Start BEV stitcher node (required by SmolVLA)'),
 
         # ── Nodes ─────────────────────────────────────────────────────────────
         driver_node,
@@ -218,5 +249,7 @@ def generate_launch_description():
         vla_node,
         cmd_vel_mux_node,
         mission_planner_node,
+        bev_stitcher_node,
+        rosbridge_node,
         rviz_node,
     ])

@@ -1,4 +1,7 @@
 from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.conditions import IfCondition
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 from launch.substitutions import Command
@@ -6,6 +9,8 @@ from launch_ros.descriptions import ParameterValue
 import os
 
 def generate_launch_description():
+    use_rosbridge = LaunchConfiguration('use_rosbridge', default='true')
+
     # Get the launch directory
     pkg_omnibot_description = get_package_share_directory('omnibot_description')
     xacro_file = os.path.join(pkg_omnibot_description, 'urdf', 'omnibot.urdf.xacro')
@@ -35,9 +40,25 @@ def generate_launch_description():
         parameters=[{'robot_description': robot_description_config}]
     )
 
+    # ROSBridge WebSocket server — required by the Android app (ws://<robot>:9090)
+    # Disable with: ros2 launch omnibot_bringup robot.launch.py use_rosbridge:=false
+    rosbridge_node = Node(
+        package='rosbridge_server',
+        executable='rosbridge_websocket',
+        name='rosbridge_websocket',
+        output='screen',
+        parameters=[{'port': 9090}],
+        condition=IfCondition(use_rosbridge),
+    )
+
     # Create and return launch description
-    ld = LaunchDescription()
-    ld.add_action(start_driver_node)
-    ld.add_action(start_robot_state_publisher)
+    ld = LaunchDescription([
+        DeclareLaunchArgument(
+            'use_rosbridge', default_value='true',
+            description='Start ROSBridge WebSocket server on port 9090 for Android app'),
+        start_driver_node,
+        start_robot_state_publisher,
+        rosbridge_node,
+    ])
 
     return ld 
