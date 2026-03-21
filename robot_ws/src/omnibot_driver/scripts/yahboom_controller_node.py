@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 
+import os
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist, TransformStamped
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Joy, Imu
+from std_msgs.msg import Bool
 from tf2_ros import TransformBroadcaster
 import serial
 import math
@@ -13,6 +15,8 @@ from tf_transformations import quaternion_from_euler
 import time
 import struct
 import traceback
+
+_DEBUG_LOG_PATH = os.path.join(os.path.expanduser('~'), '.ros', 'omnibot_debug.log')
 
 class YahboomControllerNode(Node):
     def __init__(self):
@@ -43,7 +47,10 @@ class YahboomControllerNode(Node):
         
         # Store latest command for throttling
         self.current_twist = Twist()
-        
+
+        # Emergency stop state
+        self._emergency_stop = False
+
         self.last_beep_time = 0
         
         # Ramping State
@@ -74,7 +81,10 @@ class YahboomControllerNode(Node):
             10)
             
         self.joy_sub = self.create_subscription(Joy, 'joy', self.joy_callback, 10)
-        
+
+        self.create_subscription(
+            Bool, '/emergency_stop', self._emergency_stop_callback, 10)
+
         self.odom_pub = self.create_publisher(Odometry, 'odom', 10)
         self.imu_pub  = self.create_publisher(Imu, 'imu/data', 10)
         self.tf_broadcaster = TransformBroadcaster(self)
@@ -88,11 +98,24 @@ class YahboomControllerNode(Node):
         
         self.get_logger().info('Yahboom controller node initialized')
         
+    def _emergency_stop_callback(self, msg: Bool) -> None:
+        if msg.data and not self._emergency_stop:
+            self.get_logger().warn('EMERGENCY STOP activated — zeroing velocity.')
+            self._emergency_stop = True
+            self.current_twist = Twist()
+            self.cmd_vx = 0.0
+            self.cmd_vy = 0.0
+            self.cmd_wa = 0.0
+        elif not msg.data and self._emergency_stop:
+            self.get_logger().info('Emergency stop cleared — resuming normal control.')
+            self._emergency_stop = False
+
     def log_to_file(self, msg):
         try:
-            with open('/home/varunvaidhiya/yahboom_debug.log', 'a') as f:
+            os.makedirs(os.path.dirname(_DEBUG_LOG_PATH), exist_ok=True)
+            with open(_DEBUG_LOG_PATH, 'a') as f:
                 f.write(f"{time.time()}: {msg}\n")
-        except:
+        except Exception:
             pass
     
     def connect_serial(self):
@@ -167,6 +190,10 @@ class YahboomControllerNode(Node):
         self.current_twist = msg
 
     def send_motion_command(self):
+        if self._emergency_stop:
+            # Keep sending zero velocity while e-stop is active
+            self.send_packet(0x12, struct.pack('<bhhh', 1, 0, 0, 0))
+            return
         try:
             msg = self.current_twist
             
