@@ -1,0 +1,76 @@
+---
+# randomization_config.yaml
+# ─────────────────────────
+# Domain randomisation parameters for collect_episodes.py.
+# Adjust these to increase dataset diversity and reduce sim-to-real gap.
+
+# ── Lighting ─────────────────────────────────────────────────────────────────
+# Number of sphere lights added to the scene each episode.
+num_lights: 3
+
+# Intensity range (lumens). Wide range simulates indoor + outdoor lighting.
+light_intensity_min: 300
+light_intensity_max: 5000
+
+# ── Objects ──────────────────────────────────────────────────────────────────
+# USD paths to candidate target objects.
+# Isaac Sim Nucleus paths (prefix with get_assets_root_path()):
+target_objects:
+  - Isaac/Props/KLT_Bin/small_KLT.usd
+  - Isaac/Props/YCB/Obj_006_mustard_bottle/mustard_bottle.usd
+  - Isaac/Props/YCB/Obj_005_tomato_soup_can/tomato_soup_can.usd
+  - Isaac/Props/YCB/Obj_003_cracker_box/cracker_box.usd
+
+# Number of distractor objects placed randomly on the table per episode.
+num_distractors: 4
+
+distractor_objects:
+  - Isaac/Props/YCB/Obj_002_master_chef_can/master_chef_can.usd
+  - Isaac/Props/YCB/Obj_004_sugar_box/sugar_box.usd
+  - Isaac/Props/Blocks/block.usd
+
+# ── Table / surface ───────────────────────────────────────────────────────────
+table_height: 0.74   # metres (standard desk height)
+
+# ── Scripted policy timing ───────────────────────────────────────────────────
+# Control frequency sent to /cmd_vel and /arm/joint_commands.
+policy_hz: 10.0
+
+# Maximum base velocity used in the scripted approach / retreat phases.
+max_base_vel_ms: 0.15   # m/s — kept below safety limit of 0.2 m/s
+
+# ── Camera sensors ───────────────────────────────────────────────────────────
+# These must match data_engine/schema/constants.py and smolvla_params.yaml.
+cameras:
+  wrist:
+    resolution: [320, 240]
+    fps: 30
+    fov_deg: 90
+  base_front:
+    resolution: [640, 480]
+    fps: 30
+    fov_deg: 110
+  base_rear:
+    resolution: [640, 480]
+    fps: 30
+    fov_deg: 110
+  base_left:
+    resolution: [640, 480]
+    fps: 30
+    fov_deg: 110
+  base_right:
+    resolution: [640, 480]
+    fps: 30
+    fov_deg: 110
+  depth:
+    resolution: [640, 480]
+    fps: 30
+    min_depth_m: 0.1
+    max_depth_m: 5.0
+
+# ── Episode collection ───────────────────────────────────────────────────────
+# How many Replicator sub-frames to step for physics warm-up before recording.
+replicator_warmup_subframes: 4
+
+# Seconds to wait after ros2 bag record starts before running the policy.
+bag_startup_delay_s: 0.5
