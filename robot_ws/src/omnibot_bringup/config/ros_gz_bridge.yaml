@@ -78,6 +78,15 @@
   gz_type_name: "gz.msgs.CameraInfo"
   direction: GZ_TO_ROS
 
+# ── 2D Lidar — RPLidar A1 (simulated gpu_lidar sensor in URDF) ────────────────
+# Gazebo publishes gz.msgs.LaserScan; bridge converts to sensor_msgs/LaserScan.
+# Used by: slam_toolbox, AMCL, Nav2 obstacle/voxel layers.
+- ros_topic_name: "/scan"
+  gz_topic_name: "/scan"
+  ros_type_name: "sensor_msgs/msg/LaserScan"
+  gz_type_name: "gz.msgs.LaserScan"
+  direction: GZ_TO_ROS
+
 # Per-frame PointCloud2 for Nav2 VoxelLayer / ObstacleLayer
 - ros_topic_name: "/camera/depth/points"
   gz_topic_name: "/camera/depth/points"

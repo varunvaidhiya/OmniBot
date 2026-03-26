@@ -25,6 +25,9 @@
     </plugin>
     <plugin filename="gz-sim-imu-system"
             name="gz::sim::systems::Imu"/>
+    <!-- Required for gpu_lidar sensor in the robot URDF -->
+    <plugin filename="gz-sim-gpu-lidar-system"
+            name="gz::sim::systems::GpuLidar"/>
 
     <!-- Sunlight -->
     <light type="directional" name="sun">
