@@ -30,8 +30,7 @@ Isaac Sim 4.x API reference:
 """
 
 import omni.graph.core as og
-import omni.usd
-from omni.isaac.core.utils.stage import get_current_stage
+import omni.usd  # noqa: F401 — required for Isaac Sim USD context initialisation
 
 ROBOT_PRIM   = "/World/OmniBot"
 GRAPH_PATH   = f"{ROBOT_PRIM}/ros2_graph"
