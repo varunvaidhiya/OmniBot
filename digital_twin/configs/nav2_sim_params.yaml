@@ -10,9 +10,9 @@
 # Key differences from hardware:
 #   1. use_sim_time: True  (drives all nodes from /clock)
 #   2. Inflation radius reduced (sim walls are perfectly flat, no sensor jitter)
-#   3. Looser scan tolerances (Gazebo lidar is clean, no range noise spike)
+#   3. /scan comes from depthimage_to_laserscan (same as hardware: Astra Pro depth)
 #   4. Slightly higher controller frequency (sim CPU is usually faster)
-#   5. AMCL sigma_hit tighter (perfect scan alignment expected in sim)
+#   5. AMCL sigma_hit tighter (cleaner depth-derived scan expected in sim)
 
 amcl:
   ros__parameters:

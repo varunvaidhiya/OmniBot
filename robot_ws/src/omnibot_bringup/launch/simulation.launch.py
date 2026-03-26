@@ -76,7 +76,7 @@ def generate_launch_description():
         ]
     )
 
-    # ── 4. ROS ↔ GZ bridge (/cmd_vel, /odom, /tf, /imu, /scan, /camera/*) ───
+    # ── 4. ROS ↔ GZ bridge (/cmd_vel, /odom, /tf, /imu, /camera/*) ──────────
     bridge = Node(
         package='ros_gz_bridge',
         executable='parameter_bridge',
@@ -99,7 +99,31 @@ def generate_launch_description():
         ]
     )
 
-    # ── 6. BEV stitcher — composites 4 base cameras into /camera/base/bev ────
+    # ── 6. depthimage_to_laserscan — virtual /scan from Astra Pro depth image ──
+    # OmniBot has NO 2D lidar.  slam_toolbox and Nav2 expect /scan (LaserScan).
+    # This node converts /camera/depth/image_raw → /scan at the same height
+    # slice as the Astra Pro, matching real hardware behaviour where
+    # nav2_params.yaml drives slam_toolbox from the depth camera.
+    # scan_height=1 takes the single middle row; range_min/max match Astra Pro.
+    depth_to_scan = Node(
+        package='depthimage_to_laserscan',
+        executable='depthimage_to_laserscan_node',
+        name='depthimage_to_laserscan',
+        output='screen',
+        parameters=[{
+            'scan_height':   1,
+            'range_min':     0.6,
+            'range_max':     8.0,
+            'output_frame':  'depth_camera_optical_frame',
+        }],
+        remappings=[
+            ('depth',          '/camera/depth/image_raw'),
+            ('depth_camera_info', '/camera/depth/camera_info'),
+            ('scan',           '/scan'),
+        ],
+    )
+
+    # ── 8. BEV stitcher — composites 4 base cameras into /camera/base/bev ────
     # Required by smolvla_node; safe to disable with bev:=false for quick tests.
     bev_stitcher = TimerAction(
         period=5.0,
@@ -114,7 +138,7 @@ def generate_launch_description():
         ]
     )
 
-    # ── 7. ROSBridge — WebSocket on port 9090 (Android app + web clients) ────
+    # ── 9. ROSBridge — WebSocket on port 9090 (Android app + web clients) ────
     rosbridge = Node(
         package='rosbridge_server',
         executable='rosbridge_websocket',
@@ -124,7 +148,7 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('rosbridge')),
     )
 
-    # ── 8. Foxglove bridge — WebSocket on port 8765 (browser visualisation) ──
+    # ── 10. Foxglove bridge — WebSocket on port 8765 (browser visualisation) ──
     # Open https://app.foxglove.dev → Connect → ws://localhost:8765
     foxglove_bridge = Node(
         package='foxglove_bridge',
@@ -135,7 +159,7 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('foxglove')),
     )
 
-    # ── 9. RViz ───────────────────────────────────────────────────────────────
+    # ── 11. RViz ───────────────────────────────────────────────────────────────
     rviz = Node(
         package='rviz2',
         executable='rviz2',
@@ -156,6 +180,7 @@ def generate_launch_description():
         spawn_entity,
         bridge,
         arm_driver,
+        depth_to_scan,
         bev_stitcher,
         rosbridge,
         foxglove_bridge,
