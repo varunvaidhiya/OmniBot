@@ -1,0 +1,96 @@
+{
+  "configById": {
+    "Plot!top-left": {
+      "title": "Odometry",
+      "paths": [
+        {
+          "value": "/odom.pose.pose.position.x",
+          "enabled": true,
+          "color": "#4e98e2",
+          "label": "x (m)"
+        },
+        {
+          "value": "/odom.pose.pose.position.y",
+          "enabled": true,
+          "color": "#e2904e",
+          "label": "y (m)"
+        }
+      ],
+      "minYValue": "",
+      "maxYValue": "",
+      "xAxisVal": "timestamp"
+    },
+    "ImagePanel!front-cam": {
+      "cameraTopic": "/camera/front/image_raw",
+      "cameraInfoTopic": "",
+      "title": "Front Camera"
+    },
+    "ImagePanel!bev-cam": {
+      "cameraTopic": "/camera/base/bev/image_raw",
+      "cameraInfoTopic": "",
+      "title": "BEV Camera"
+    },
+    "ImagePanel!wrist-cam": {
+      "cameraTopic": "/camera/wrist/image_raw",
+      "cameraInfoTopic": "",
+      "title": "Wrist Camera"
+    },
+    "ThreeDeeRender!3d-view": {
+      "cameraState": {
+        "perspective": true,
+        "distance": 5,
+        "phi": 60,
+        "thetaOffset": 0,
+        "targetOffset": [0, 0, 0],
+        "fovy": 45,
+        "near": 0.01,
+        "far": 5000
+      },
+      "followTf": "base_link",
+      "scene": {
+        "enableStats": false
+      },
+      "topics": {
+        "/scan": {"visible": true, "pointSize": 2, "color": {"r": 1, "g": 0.2, "b": 0.2, "a": 1}},
+        "/map": {"visible": true, "alpha": 0.7},
+        "/odom": {"visible": true},
+        "/camera/depth/points": {"visible": true, "pointSize": 1}
+      }
+    },
+    "RawMessages!joint-states": {
+      "topicPath": "/arm/joint_states"
+    }
+  },
+  "globalVariables": {},
+  "layout": {
+    "first": {
+      "first": {
+        "first": "ImagePanel!front-cam",
+        "second": "ImagePanel!bev-cam",
+        "direction": "column",
+        "splitPercentage": 50
+      },
+      "second": {
+        "first": "ImagePanel!wrist-cam",
+        "second": "RawMessages!joint-states",
+        "direction": "column",
+        "splitPercentage": 60
+      },
+      "direction": "row",
+      "splitPercentage": 50
+    },
+    "second": {
+      "first": "ThreeDeeRender!3d-view",
+      "second": "Plot!top-left",
+      "direction": "column",
+      "splitPercentage": 70
+    },
+    "direction": "row",
+    "splitPercentage": 60
+  },
+  "playbackConfig": {
+    "speed": 1
+  },
+  "userNodes": {},
+  "version": "foxglove.studio@1"
+}

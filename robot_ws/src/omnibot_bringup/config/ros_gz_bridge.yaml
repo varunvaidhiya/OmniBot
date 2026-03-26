@@ -78,6 +78,11 @@
   gz_type_name: "gz.msgs.CameraInfo"
   direction: GZ_TO_ROS
 
+# NOTE: OmniBot has no 2D lidar.  The /scan (LaserScan) topic used by
+# slam_toolbox and Nav2 is generated at runtime by the depthimage_to_laserscan
+# node (see simulation.launch.py) from the Orbbec Astra Pro depth image.
+# No bridge entry is needed here for /scan.
+
 # Per-frame PointCloud2 for Nav2 VoxelLayer / ObstacleLayer
 - ros_topic_name: "/camera/depth/points"
   gz_topic_name: "/camera/depth/points"

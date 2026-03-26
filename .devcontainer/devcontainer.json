@@ -1,0 +1,52 @@
+{
+  // OmniBot development container — ROS 2 Jazzy + Gazebo Harmonic
+  // Prerequisites: Docker Desktop or Docker Engine + VS Code Dev Containers extension
+  //
+  // GPU passthrough (optional, needed for Isaac Sim / VLA):
+  //   Linux: Docker + NVIDIA Container Toolkit installed on host
+  //   The "runArgs" below enable GPU for Linux hosts; remove on Windows/Mac.
+  "name": "OmniBot ROS 2 Dev",
+  "build": {
+    "dockerfile": "../digital_twin/docker/Dockerfile.sim",
+    "context": ".."
+  },
+  "runArgs": [
+    "--network=host",
+    // GPU passthrough — requires NVIDIA Container Toolkit on host
+    // Remove the two lines below if you do not have an NVIDIA GPU
+    "--gpus=all",
+    "--device=/dev/dri"
+  ],
+  "containerEnv": {
+    "ROS_DOMAIN_ID": "30",
+    "DISPLAY": "${localEnv:DISPLAY}",
+    "LIBGL_ALWAYS_SOFTWARE": "0"
+  },
+  "mounts": [
+    // Persist X11 socket for Gazebo / RViz GUI on Linux
+    "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind,consistency=cached"
+  ],
+  "postCreateCommand": "bash /workspaces/OmniBot/digital_twin/docker/post_create.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-iot.vscode-ros",
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "twxs.cmake",
+        "ms-vscode.cmake-tools",
+        "foxglove.foxglove-studio",
+        "redhat.vscode-yaml",
+        "eamodio.gitlens"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/bin/python3",
+        "ros.distro": "jazzy",
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    }
+  },
+  "remoteUser": "user",
+  "workspaceFolder": "/workspaces/OmniBot",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/OmniBot,type=bind,consistency=cached"
+}

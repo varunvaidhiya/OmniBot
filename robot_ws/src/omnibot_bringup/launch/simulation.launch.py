@@ -1,17 +1,18 @@
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription, TimerAction
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, TimerAction
+from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import Command
+from launch.substitutions import Command, LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
 import os
 
 def generate_launch_description():
-    pkg_ros_gz_sim         = FindPackageShare(package='ros_gz_sim').find('ros_gz_sim')
+    pkg_ros_gz_sim          = FindPackageShare(package='ros_gz_sim').find('ros_gz_sim')
     pkg_omnibot_description = FindPackageShare(package='omnibot_description').find('omnibot_description')
-    pkg_omnibot_bringup    = FindPackageShare(package='omnibot_bringup').find('omnibot_bringup')
-    pkg_omnibot_arm        = FindPackageShare(package='omnibot_arm').find('omnibot_arm')
+    pkg_omnibot_bringup     = FindPackageShare(package='omnibot_bringup').find('omnibot_bringup')
+    pkg_omnibot_arm         = FindPackageShare(package='omnibot_arm').find('omnibot_arm')
 
     xacro_file       = os.path.join(pkg_omnibot_description, 'urdf', 'omnibot.urdf.xacro')
     rviz_config_path = os.path.join(pkg_omnibot_bringup, 'config', 'omnibot.rviz')
@@ -21,12 +22,33 @@ def generate_launch_description():
 
     robot_desc = ParameterValue(Command(['xacro ', xacro_file]), value_type=str)
 
+    # ── Launch arguments ──────────────────────────────────────────────────────
+    rviz_arg = DeclareLaunchArgument(
+        'rviz', default_value='true',
+        description='Launch RViz2 (set false for headless / CI)')
+
+    bev_arg = DeclareLaunchArgument(
+        'bev', default_value='true',
+        description='Launch BEV stitcher (requires 4 base cameras in Gazebo)')
+
+    rosbridge_arg = DeclareLaunchArgument(
+        'rosbridge', default_value='true',
+        description='Launch ROSBridge on port 9090 (needed for Android app)')
+
+    foxglove_arg = DeclareLaunchArgument(
+        'foxglove', default_value='true',
+        description='Launch Foxglove bridge on ws://localhost:8765')
+
+    world_arg = DeclareLaunchArgument(
+        'world', default_value=world_file,
+        description='Path to Gazebo world SDF')
+
     # ── 1. Gazebo Sim (-r = run unpaused) ────────────────────────────────────
     gazebo = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(pkg_ros_gz_sim, 'launch', 'gz_sim.launch.py')
         ),
-        launch_arguments={'gz_args': f'-r {world_file}'}.items(),
+        launch_arguments={'gz_args': ['-r ', LaunchConfiguration('world')]}.items(),
     )
 
     # ── 2. Robot State Publisher ──────────────────────────────────────────────
@@ -54,8 +76,7 @@ def generate_launch_description():
         ]
     )
 
-    # ── 4. ROS ↔ GZ bridge — use the YAML config (was defined but unused) ────
-    # Bridges:  /cmd_vel, /odom, /tf, /imu/data, /camera/*, /joint_states
+    # ── 4. ROS ↔ GZ bridge (/cmd_vel, /odom, /tf, /imu, /camera/*) ──────────
     bridge = Node(
         package='ros_gz_bridge',
         executable='parameter_bridge',
@@ -64,12 +85,8 @@ def generate_launch_description():
     )
 
     # ── 5. Arm driver — simulation passthrough mode ───────────────────────────
-    # Receives /arm/joint_commands, stores commanded positions, publishes them.
-    # Remapped onto /joint_states so robot_state_publisher gets arm joint angles
-    # (wheel joint angles come from Gazebo JointStatePublisher via the bridge).
-    # joint_names in arm_params.yaml MUST match the URDF joint names (arm_ prefix).
     arm_driver = TimerAction(
-        period=4.0,   # wait for Gazebo + RSP to be fully up
+        period=4.0,
         actions=[
             Node(
                 package='omnibot_arm',
@@ -77,29 +94,95 @@ def generate_launch_description():
                 name='arm_driver_node',
                 output='screen',
                 parameters=[arm_params],
-                remappings=[
-                    # Feed arm joint angles into /joint_states so robot_state_publisher
-                    # can animate the arm in RViz alongside the wheel states from Gazebo.
-                    ('/arm/joint_states', '/joint_states'),
-                ],
+                remappings=[('/arm/joint_states', '/joint_states')],
             )
         ]
     )
 
-    # ── 6. RViz ───────────────────────────────────────────────────────────────
+    # ── 6. depthimage_to_laserscan — virtual /scan from Astra Pro depth image ──
+    # OmniBot has NO 2D lidar.  slam_toolbox and Nav2 expect /scan (LaserScan).
+    # This node converts /camera/depth/image_raw → /scan at the same height
+    # slice as the Astra Pro, matching real hardware behaviour where
+    # nav2_params.yaml drives slam_toolbox from the depth camera.
+    # scan_height=1 takes the single middle row; range_min/max match Astra Pro.
+    depth_to_scan = Node(
+        package='depthimage_to_laserscan',
+        executable='depthimage_to_laserscan_node',
+        name='depthimage_to_laserscan',
+        output='screen',
+        parameters=[{
+            'scan_height':   1,
+            'range_min':     0.6,
+            'range_max':     8.0,
+            'output_frame':  'depth_camera_optical_frame',
+        }],
+        remappings=[
+            ('depth',          '/camera/depth/image_raw'),
+            ('depth_camera_info', '/camera/depth/camera_info'),
+            ('scan',           '/scan'),
+        ],
+    )
+
+    # ── 8. BEV stitcher — composites 4 base cameras into /camera/base/bev ────
+    # Required by smolvla_node; safe to disable with bev:=false for quick tests.
+    bev_stitcher = TimerAction(
+        period=5.0,
+        actions=[
+            Node(
+                package='ros2_bev_stitcher',
+                executable='bev_stitcher_node',
+                name='bev_stitcher_node',
+                output='screen',
+                condition=IfCondition(LaunchConfiguration('bev')),
+            )
+        ]
+    )
+
+    # ── 9. ROSBridge — WebSocket on port 9090 (Android app + web clients) ────
+    rosbridge = Node(
+        package='rosbridge_server',
+        executable='rosbridge_websocket',
+        name='rosbridge_websocket',
+        output='screen',
+        parameters=[{'port': 9090}],
+        condition=IfCondition(LaunchConfiguration('rosbridge')),
+    )
+
+    # ── 10. Foxglove bridge — WebSocket on port 8765 (browser visualisation) ──
+    # Open https://app.foxglove.dev → Connect → ws://localhost:8765
+    foxglove_bridge = Node(
+        package='foxglove_bridge',
+        executable='foxglove_bridge',
+        name='foxglove_bridge',
+        output='screen',
+        parameters=[{'port': 8765, 'address': '0.0.0.0'}],
+        condition=IfCondition(LaunchConfiguration('foxglove')),
+    )
+
+    # ── 11. RViz ───────────────────────────────────────────────────────────────
     rviz = Node(
         package='rviz2',
         executable='rviz2',
         name='rviz2',
         output='screen',
-        arguments=['-d', rviz_config_path]
+        arguments=['-d', rviz_config_path],
+        condition=IfCondition(LaunchConfiguration('rviz')),
     )
 
     return LaunchDescription([
+        rviz_arg,
+        bev_arg,
+        rosbridge_arg,
+        foxglove_arg,
+        world_arg,
         gazebo,
         robot_state_publisher,
         spawn_entity,
         bridge,
         arm_driver,
+        depth_to_scan,
+        bev_stitcher,
+        rosbridge,
+        foxglove_bridge,
         rviz,
     ])
