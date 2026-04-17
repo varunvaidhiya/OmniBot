@@ -17,6 +17,8 @@ parameters, or conventions.
 | `packages/` | Standalone Python packages (shared, not ROS-dependent) |
 | `vla_engine/` | PyTorch VLA training/inference (no ROS) |
 | `data_engine/` | Episode-based dataset collection pipeline |
+| `lerobot_engine/` | Direct LeRobot training/recording/inference scripts (no ROS) |
+| `digital_twin/` | Contributor simulation environment (Gazebo, Isaac Sim, Foxglove) |
 | `android_app/` | Kotlin MVVM Android controller (ROSBridge WebSocket) |
 | `infra/` | Docker, DevContainers, CI/CD scripts |
 
@@ -48,7 +50,8 @@ Mecanum-Wheel-Robot/
 │   ├── yahboom_ros2/              # Pure-Python Yahboom protocol encoder/decoder
 │   ├── vla_serve/                 # FastAPI VLA inference server
 │   ├── robot_episode_dataset/     # LeRobot-format dataset helpers
-│   └── ros2_bev_stitcher/         # BEV (bird's-eye-view) image stitcher
+│   ├── ros2_bev_stitcher/         # BEV (bird's-eye-view) image stitcher
+│   └── mecanum_drive_ros2/        # C++17 + Python mecanum kinematics library
 ├── vla_engine/
 │   ├── inference/server.py        # FastAPI server wrapping OpenVLA
 │   ├── models/openvla.py          # OpenVLA model wrapper
@@ -57,9 +60,25 @@ Mecanum-Wheel-Robot/
 │   ├── schema/constants.py        # Action/state/camera specs
 │   ├── ingestion/                 # ROS bag → LeRobot format
 │   └── tests/
+├── lerobot_engine/
+│   ├── train.py                   # Direct LeRobot policy training
+│   ├── record.py                  # Direct LeRobot episode recording
+│   ├── infer.py                   # Direct LeRobot inference
+│   └── requirements.txt
+├── digital_twin/
+│   ├── worlds/omnibot_lab.sdf     # Rich indoor lab world (table, shelf, YCB objects)
+│   ├── scenarios/                 # VLA/nav benchmark scenario definitions
+│   ├── docker/                    # Dockerfile.sim + docker-compose.yml
+│   ├── configs/                   # RViz configs (perception/navigation/manipulation) + Foxglove layout
+│   └── scripts/                   # build_usd.sh (URDF→Isaac Sim USD), setup_omnigraph.py
 ├── android_app/                   # Kotlin MVVM app (ROSBridge WebSocket)
 ├── confirmed_protocol.py          # Yahboom protocol reference (root debug script)
-├── launch_simulation.sh           # Convenience build+launch for Gazebo
+├── network.env                    # Cross-machine DDS peer IPs (edit before multi-machine use)
+├── docker-compose.yml             # Full-stack Docker Compose (robot + vla + rosbridge services)
+├── launch_simulation.sh           # Convenience build+launch for Gazebo (sets ROS_DOMAIN_ID=30)
+├── launch_teleop.sh               # Convenience teleop launcher (sources network.env for DDS peers)
+├── launch_rosbridge.sh            # Start ROSBridge WebSocket server for Android app
+├── launch_mobile_manipulation.sh  # Mobile manipulation bringup (base + arm + cameras + rosbridge)
 └── fuzz_*.py, scan_*.py, ...      # Hardware debug scripts — NOT part of ROS
 ```
 
@@ -104,15 +123,23 @@ cd data_engine && pytest tests/
 # Basic robot: driver + state publisher
 ros2 launch omnibot_bringup robot.launch.py
 
-# Robot + Xbox controller
+# Robot + Xbox controller (also available as ./launch_teleop.sh which sources network.env)
 ros2 launch omnibot_bringup robot_with_joy.launch.py
 
 # Xbox controller teleoperation only
 ros2 launch omnibot_bringup joy_teleop.launch.py
 
 # Gazebo simulation + RViz
-./launch_simulation.sh           # convenience: builds, sources, then launches
+./launch_simulation.sh           # convenience: builds, sources, then launches (ROS_DOMAIN_ID=30)
 ros2 launch omnibot_bringup simulation.launch.py   # direct
+
+# Mobile manipulation (base + arm + cameras + rosbridge)
+./launch_mobile_manipulation.sh  # convenience: auto-builds, checks deps, starts rosbridge
+ros2 launch omnibot_bringup mobile_manipulation.launch.py   # direct
+
+# ROSBridge WebSocket (required for Android app, port 9090)
+./launch_rosbridge.sh            # convenience: shows local IP for Android config
+ros2 launch rosbridge_server rosbridge_websocket_launch.xml port:=9090
 
 # Autonomous navigation with SLAM
 ros2 launch omnibot_navigation autonomous_robot.launch.py
@@ -388,6 +415,105 @@ Stitches 4 base-mounted cameras into a single bird's-eye-view image.
 Publishes `/camera/base/bev/image_raw`.
 Must be running whenever `smolvla_node` or `teleop_recorder_node` is active.
 Config: `packages/ros2_bev_stitcher/config/bev_params.yaml`.
+
+### `mecanum_drive_ros2`
+
+Hardware-agnostic mecanum kinematics — C++17 header-only library
+(`include/mecanum_drive_ros2/mecanum_kinematics.hpp`) with a pure Python mirror
+(`mecanum_drive_ros2.kinematics`). Provides inverse kinematics (body twist → wheel ω)
+and forward kinematics (wheel ω → body twist) using the same physical constants
+as the rest of the project.
+
+```python
+from mecanum_drive_ros2 import RobotGeometry, inverse_kinematics, forward_kinematics
+geom = RobotGeometry(wheel_radius=0.04, wheel_separation_width=0.215,
+                     wheel_separation_length=0.165)
+fl, fr, bl, br = inverse_kinematics(vx=0.3, vy=0.0, omega=0.0, geom=geom)
+```
+
+---
+
+## Digital Twin
+
+`digital_twin/` is a contributor-ready simulation environment — no physical
+hardware required.
+
+### Quick-start options
+
+| Option | Command |
+|---|---|
+| VS Code DevContainer (recommended) | Open folder → **Reopen in Container** |
+| Docker Compose (headless) | `docker compose -f digital_twin/docker/docker-compose.yml up` then open Foxglove at `ws://localhost:8765` |
+| Native Ubuntu 24.04 | `./launch_simulation.sh` |
+
+### Contributor domain entry points
+
+| Area | Launch | Visualization |
+|---|---|---|
+| Perception / Cameras | `simulation.launch.py` | `digital_twin/configs/rviz/perception.rviz` |
+| SLAM / Mapping | `simulation.launch.py` + `slam_toolbox.launch.py` | `digital_twin/configs/rviz/navigation.rviz` |
+| Nav2 | `simulation.launch.py` + `autonomous_robot.launch.py` | `digital_twin/configs/rviz/navigation.rviz` |
+| Arm / Manipulation | `simulation.launch.py` | `digital_twin/configs/rviz/manipulation.rviz` |
+| VLA / Training data | Isaac Sim + `isaac_sim.launch.py` | Foxglove |
+
+Use `digital_twin/configs/nav2_sim_params.yaml` (not `robot_ws/.../nav2_params.yaml`)
+for simulation-tuned Nav2 costmaps:
+
+```bash
+ros2 launch omnibot_navigation autonomous_robot.launch.py \
+  params_file:=$(pwd)/digital_twin/configs/nav2_sim_params.yaml
+```
+
+### Lab world (richer than default)
+
+```bash
+ros2 launch omnibot_bringup simulation.launch.py \
+  world:=$(pwd)/digital_twin/worlds/omnibot_lab.sdf
+```
+
+### Isaac Sim (VLA / training data)
+
+```bash
+bash digital_twin/scripts/build_usd.sh          # URDF → USD (run once per URDF change)
+# Start Isaac Sim, then in Script Editor:
+#   digital_twin/scripts/setup_omnigraph.py
+ros2 launch omnibot_bringup isaac_sim.launch.py
+python3 data_engine/isaac_sim/collect_episodes.py \
+  --config data_engine/isaac_sim/randomization_config.yaml \
+  --output ~/datasets/omnibot
+```
+
+---
+
+## LeRobot Engine
+
+`lerobot_engine/` provides standalone scripts for direct LeRobot interaction
+without ROS. Install deps: `pip install -r lerobot_engine/requirements.txt`.
+
+```bash
+# Record demonstrations
+python lerobot_engine/record.py
+
+# Train a policy
+python lerobot_engine/train.py
+
+# Run inference
+python lerobot_engine/infer.py
+```
+
+---
+
+## Multi-Machine Networking
+
+Edit `network.env` with the actual IPs before running cross-machine:
+
+```bash
+WORKSTATION_IP=192.168.1.100   # GPU desktop running VLA
+PI_IP=192.168.1.101            # Raspberry Pi 5 running ROS
+```
+
+`launch_teleop.sh` and the other convenience scripts source this file and set
+`ROS_STATIC_PEERS` automatically. `ROS_DOMAIN_ID=30` must match on all machines.
 
 ---
 

@@ -198,25 +198,31 @@ class YahboomControllerNode(Node):
             msg = self.current_twist
             
             # CLAMP SPEED to prevent Brownout/Over-current - SAFE MODE
-            MAX_VAL = 0.2  # m/s
-            RAMP_STEP = 0.05  # m/s per 0.05s tick
-            
-            target_vx = np.clip(msg.linear.x, -MAX_VAL, MAX_VAL)
-            target_vy = np.clip(msg.linear.y, -MAX_VAL, MAX_VAL)
-            target_w  = np.clip(msg.angular.z, -1.0, 1.0)
-            
-            # Ramping Logic
+            MAX_VAL = 0.2   # m/s
+            MAX_ANG = 1.0   # rad/s
+            RAMP_STEP     = 0.025  # m/s per tick — halved for smoother linear accel
+            RAMP_STEP_ANG = 0.05   # rad/s per tick — smooth angular start/stop
+
+            target_vx = np.clip(msg.linear.x,  -MAX_VAL, MAX_VAL)
+            target_vy = np.clip(msg.linear.y,  -MAX_VAL, MAX_VAL)
+            target_w  = np.clip(msg.angular.z, -MAX_ANG, MAX_ANG)
+
+            # Ramping Logic — linear
             if self.cmd_vx < target_vx:
                 self.cmd_vx = min(self.cmd_vx + RAMP_STEP, target_vx)
             elif self.cmd_vx > target_vx:
                 self.cmd_vx = max(self.cmd_vx - RAMP_STEP, target_vx)
-                
+
             if self.cmd_vy < target_vy:
                 self.cmd_vy = min(self.cmd_vy + RAMP_STEP, target_vy)
             elif self.cmd_vy > target_vy:
                 self.cmd_vy = max(self.cmd_vy - RAMP_STEP, target_vy)
 
-            self.cmd_wa = target_w
+            # Ramping Logic — angular (previously instant, now smoothed)
+            if self.cmd_wa < target_w:
+                self.cmd_wa = min(self.cmd_wa + RAMP_STEP_ANG, target_w)
+            elif self.cmd_wa > target_w:
+                self.cmd_wa = max(self.cmd_wa - RAMP_STEP_ANG, target_w)
             
             # Send onboard Mecanum kinematics command (0x12)
             # Board computes wheel speeds internally using CAR_TYPE=1 algorithm
