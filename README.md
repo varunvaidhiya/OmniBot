@@ -3,8 +3,8 @@
 > **A $500 mobile manipulation robot** that learns pick-and-place tasks from ~50 human demonstrations.
 > Mecanum base + SO-101 arm + 6-camera array controlled by a single learned policy. Fully open-source.
 
-<!-- Replace with your demo GIF once recorded -->
-<!-- ![OmniBot demo](docs/assets/demo.gif) -->
+![OmniBot demo 1](assets/Omnibot_demo1.gif)
+![OmniBot demo 2](assets/Omnibot_demo2.gif)
 
 <p align="center">
   <a href="../../wiki/Bill-of-Materials"><img src="https://img.shields.io/badge/BOM-Wiki-blue"/></a>
