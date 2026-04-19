@@ -75,8 +75,11 @@ dependencies {
     // Preferences DataStore
     implementation("androidx.datastore:datastore-preferences:1.0.0")
 
-    // ViewPager2 (Map tabs: SLAM / 3D)
+    // ViewPager2 (Map tabs: SLAM / 3D / Robot Viewer)
     implementation("androidx.viewpager2:viewpager2:1.0.0")
+
+    // SceneView — Filament-based 3D robot viewer (GLB model + live joint animation)
+    implementation("io.github.sceneview:sceneview:2.2.1")
 
     // RecyclerView (AI chat list)
     implementation("androidx.recyclerview:recyclerview:1.3.2")
