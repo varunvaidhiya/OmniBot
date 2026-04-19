@@ -11,11 +11,19 @@
         android:label="@string/title_dashboard"
         tools:layout="@layout/fragment_dashboard" />
 
+    <!-- Map: contains SLAM 2D + 3D point cloud tabs -->
     <fragment
-        android:id="@+id/navigation_slam"
-        android:name="com.varunvaidhiya.robotcontrol.ui.slam.SlamMapFragment"
-        android:label="SLAM Map"
-        tools:layout="@layout/fragment_slam_map" />
+        android:id="@+id/navigation_map"
+        android:name="com.varunvaidhiya.robotcontrol.ui.mapping.MapFragment"
+        android:label="@string/title_map"
+        tools:layout="@layout/fragment_map" />
+
+    <!-- AI: natural language robot control -->
+    <fragment
+        android:id="@+id/navigation_ai"
+        android:name="com.varunvaidhiya.robotcontrol.ui.ai.AIFragment"
+        android:label="@string/title_ai"
+        tools:layout="@layout/fragment_ai" />
 
     <fragment
         android:id="@+id/navigation_controls"
@@ -24,14 +32,9 @@
         tools:layout="@layout/fragment_controls" />
 
     <fragment
-        android:id="@+id/navigation_logs"
-        android:name="com.varunvaidhiya.robotcontrol.ui.logs.LogsFragment"
-        android:label="@string/title_logs"
-        tools:layout="@layout/fragment_logs" />
-
-    <fragment
         android:id="@+id/navigation_settings"
         android:name="com.varunvaidhiya.robotcontrol.ui.settings.SettingsFragment"
         android:label="@string/title_settings"
         tools:layout="@layout/fragment_settings" />
+
 </navigation>

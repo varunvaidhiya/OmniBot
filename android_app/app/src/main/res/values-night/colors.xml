@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark mode brand colors -->
+    <color name="primary_color">#64B5F6</color>     <!-- lighter blue on dark -->
+    <color name="primary_dark">#1565C0</color>
+    <color name="accent_color">#FF80AB</color>       <!-- lighter pink on dark -->
+
+    <!-- Dark mode surfaces -->
+    <color name="background_light">#121212</color>  <!-- dark surface bg -->
+    <color name="card_background">#1E1E1E</color>   <!-- elevated dark card -->
+
+    <!-- Status colors stay the same -->
+    <color name="status_connected">#66BB6A</color>
+    <color name="status_connecting">#FFA726</color>
+    <color name="status_error">#EF5350</color>
+
+    <!-- Dark mode text -->
+    <color name="text_primary">#FFFFFFFF</color>
+    <color name="text_secondary">#B0BEC5</color>
+</resources>

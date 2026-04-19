@@ -5,17 +5,17 @@
         android:icon="@drawable/ic_dashboard"
         android:title="@string/title_dashboard" />
     <item
-        android:id="@+id/navigation_slam"
+        android:id="@+id/navigation_map"
         android:icon="@drawable/ic_map"
-        android:title="SLAM" />
+        android:title="@string/title_map" />
+    <item
+        android:id="@+id/navigation_ai"
+        android:icon="@drawable/ic_ai_chat"
+        android:title="@string/title_ai" />
     <item
         android:id="@+id/navigation_controls"
         android:icon="@drawable/ic_gamepad"
         android:title="@string/title_controls" />
-    <item
-        android:id="@+id/navigation_logs"
-        android:icon="@drawable/ic_assignment"
-        android:title="@string/title_logs" />
     <item
         android:id="@+id/navigation_settings"
         android:icon="@drawable/ic_settings"

@@ -2,11 +2,11 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#0A0A0A">
+    android:background="#050510">
 
-    <!-- Full-screen SLAM occupancy grid -->
-    <com.varunvaidhiya.robotcontrol.ui.views.SlamMapView
-        android:id="@+id/slam_map_view"
+    <!-- Top-down point cloud canvas -->
+    <com.varunvaidhiya.robotcontrol.ui.views.PointCloudView
+        android:id="@+id/point_cloud_view"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
@@ -14,7 +14,7 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="2D SLAM Map"
+        android:text="3D Point Cloud  (top-down)"
         android:textColor="#FFFFFF"
         android:textSize="13sp"
         android:textStyle="bold"
@@ -23,9 +23,59 @@
         android:layout_gravity="top|center_horizontal"
         android:layout_marginTop="12dp" />
 
-    <!-- Robot pose info panel (bottom-left) -->
+    <!-- Depth colour legend (bottom-right) -->
     <LinearLayout
-        android:id="@+id/panel_pose"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#CC000000"
+        android:padding="8dp"
+        android:layout_gravity="bottom|end"
+        android:layout_margin="12dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="DEPTH"
+            android:textColor="#64B5F6"
+            android:textSize="9sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="4dp" />
+
+        <!-- Gradient bar -->
+        <View
+            android:id="@+id/depth_legend_bar"
+            android:layout_width="16dp"
+            android:layout_height="80dp"
+            android:background="@drawable/bg_depth_gradient" />
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="2dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="near"
+                android:textColor="#80FFFFFF"
+                android:textSize="8sp" />
+
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="far"
+            android:textColor="#80FFFFFF"
+            android:textSize="8sp" />
+
+    </LinearLayout>
+
+    <!-- Stats panel (bottom-left) -->
+    <LinearLayout
+        android:id="@+id/panel_cloud_stats"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:orientation="vertical"
@@ -37,99 +87,66 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="ROBOT POSE"
+            android:text="POINT CLOUD"
             android:textColor="#64B5F6"
             android:textSize="10sp"
             android:textStyle="bold"
             android:layout_marginBottom="4dp" />
 
         <TextView
-            android:id="@+id/text_pose_x"
+            android:id="@+id/text_point_count"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="X:    0.00 m"
+            android:text="Points: --"
             android:textColor="#FFFFFF"
             android:fontFamily="monospace"
             android:textSize="12sp" />
 
         <TextView
-            android:id="@+id/text_pose_y"
+            android:id="@+id/text_cloud_range"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Y:    0.00 m"
+            android:text="Range: -- m"
             android:textColor="#FFFFFF"
             android:fontFamily="monospace"
             android:textSize="12sp" />
 
         <TextView
-            android:id="@+id/text_pose_yaw"
+            android:id="@+id/text_cloud_fps"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="θ:    0°"
+            android:text="FPS:   --"
             android:textColor="#FFFFFF"
             android:fontFamily="monospace"
             android:textSize="12sp" />
 
     </LinearLayout>
 
-    <!-- Map stats panel (bottom-right) -->
+    <!-- No-data placeholder -->
     <LinearLayout
-        android:id="@+id/panel_map_stats"
+        android:id="@+id/layout_no_data"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:background="#CC000000"
-        android:padding="10dp"
-        android:layout_gravity="bottom|end"
-        android:layout_margin="12dp">
+        android:gravity="center"
+        android:layout_gravity="center">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="MAP STATS"
-            android:textColor="#64B5F6"
-            android:textSize="10sp"
-            android:textStyle="bold"
-            android:layout_marginBottom="4dp" />
+            android:text="No depth data"
+            android:textColor="#60FFFFFF"
+            android:textSize="16sp" />
 
         <TextView
-            android:id="@+id/text_map_size"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Size: --×-- cells"
-            android:textColor="#FFFFFF"
+            android:text="Topic: /camera/depth/points"
+            android:textColor="#40FFFFFF"
+            android:textSize="12sp"
             android:fontFamily="monospace"
-            android:textSize="12sp" />
-
-        <TextView
-            android:id="@+id/text_map_res"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Res:  0.05 m/cell"
-            android:textColor="#FFFFFF"
-            android:fontFamily="monospace"
-            android:textSize="12sp" />
-
-        <TextView
-            android:id="@+id/text_map_explored"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Known: --%"
-            android:textColor="#FFFFFF"
-            android:fontFamily="monospace"
-            android:textSize="12sp" />
+            android:layout_marginTop="6dp" />
 
     </LinearLayout>
-
-    <!-- Pinch-to-zoom hint (fades out) -->
-    <TextView
-        android:id="@+id/text_zoom_hint"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Pinch to zoom · Double-tap to reset"
-        android:textColor="#80FFFFFF"
-        android:textSize="11sp"
-        android:layout_gravity="top|start"
-        android:layout_margin="12dp" />
 
 </FrameLayout>

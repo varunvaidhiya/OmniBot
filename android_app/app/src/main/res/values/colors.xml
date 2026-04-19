@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Material default palette (kept for compatibility) -->
     <color name="purple_200">#FFBB86FC</color>
     <color name="purple_500">#FF6200EE</color>
     <color name="purple_700">#FF3700B3</color>
@@ -7,21 +8,26 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
-    
-    <!-- Custom Brand Colors -->
-    <color name="primary_color">#1976D2</color>     <!-- Blue -->
+
+    <!-- Light-mode brand colors (overridden in values-night/colors.xml for dark mode) -->
+    <color name="primary_color">#1976D2</color>
     <color name="primary_dark">#0D47A1</color>
-    <color name="accent_color">#FF4081</color>      <!-- Pink -->
-    
+    <color name="accent_color">#FF4081</color>
+
     <color name="background_light">#F5F5F5</color>
     <color name="card_background">#FFFFFF</color>
-    
-    <!-- Status Colors -->
+
+    <!-- Status indicators -->
     <color name="status_connected">#4CAF50</color>
     <color name="status_connecting">#FF9800</color>
     <color name="status_error">#F44336</color>
-    
-    <!-- Text Colors -->
+
+    <!-- Text -->
     <color name="text_primary">#212121</color>
     <color name="text_secondary">#757575</color>
+
+    <!-- Chart lines -->
+    <color name="chart_vx">#1976D2</color>
+    <color name="chart_vy">#388E3C</color>
+    <color name="chart_vz">#F57C00</color>
 </resources>

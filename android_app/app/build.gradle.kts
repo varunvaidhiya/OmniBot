@@ -74,7 +74,13 @@ dependencies {
     
     // Preferences DataStore
     implementation("androidx.datastore:datastore-preferences:1.0.0")
-    
+
+    // ViewPager2 (Map tabs: SLAM / 3D)
+    implementation("androidx.viewpager2:viewpager2:1.0.0")
+
+    // RecyclerView (AI chat list)
+    implementation("androidx.recyclerview:recyclerview:1.3.2")
+
     // Hilt
     implementation("com.google.dagger:hilt-android:2.50")
     kapt("com.google.dagger:hilt-compiler:2.50")

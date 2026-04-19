@@ -9,11 +9,12 @@ import javax.inject.Inject
 class DashboardViewModel @Inject constructor(
     private val repository: RobotRepository
 ) : ViewModel() {
-    
-    val connectionState = repository.connectionState
-    val robotStatus    = repository.robotStatus
-    val odomData       = repository.odomData
-    val wheelSpeeds    = repository.wheelSpeeds
-    val motorData      = repository.motorData
 
+    val connectionState = repository.connectionState
+    val robotStatus     = repository.robotStatus
+    val odomData        = repository.odomData
+    val mapData         = repository.mapData
+    val wheelSpeeds     = repository.wheelSpeeds
+    val motorData       = repository.motorData
+    val isRecording     = repository.isRecording
 }
