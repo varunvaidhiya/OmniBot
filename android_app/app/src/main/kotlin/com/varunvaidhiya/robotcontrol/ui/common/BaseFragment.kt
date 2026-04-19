@@ -12,9 +12,9 @@ import androidx.viewbinding.ViewBinding
  */
 abstract class BaseFragment<VB : ViewBinding> : Fragment() {
 
-    private var _binding: VB? = null
+    protected var _binding: VB? = null
     protected val binding: VB
-        get() = _binding ?: throw IllegalStateException("Binding not initialized")
+        get() = _binding ?: throw IllegalStateException("Binding not initialized for ${this::class.java.simpleName}")
 
     abstract fun inflateBinding(inflater: LayoutInflater, container: ViewGroup?): VB
 
@@ -24,7 +24,7 @@ abstract class BaseFragment<VB : ViewBinding> : Fragment() {
         savedInstanceState: Bundle?
     ): View? {
         _binding = inflateBinding(inflater, container)
-        return binding.root
+        return _binding?.root
     }
 
     override fun onDestroyView() {
