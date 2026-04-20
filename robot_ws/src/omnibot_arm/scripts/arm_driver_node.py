@@ -47,8 +47,8 @@ class ArmDriverNode(Node):
         self.declare_parameter('teleop_mode', False)
         self.declare_parameter('ticks_per_rev', 4096)
         self.declare_parameter('joint_names', [
-            'shoulder_pan', 'shoulder_lift', 'elbow_flex',
-            'wrist_flex', 'wrist_roll', 'gripper'
+            'arm_shoulder_pan', 'arm_shoulder_lift', 'arm_elbow_flex',
+            'arm_wrist_flex', 'arm_wrist_roll', 'arm_gripper'
         ])
         self.declare_parameter('motor_ids', [1, 2, 3, 4, 5, 6])
         self.declare_parameter('home_ticks', [2048, 2048, 2048, 2048, 2048, 2048])
