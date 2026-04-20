@@ -85,6 +85,10 @@ def generate_launch_description():
     )
 
     # ── 5. Arm driver — simulation passthrough mode ───────────────────────────
+    # NO remapping: arm_driver publishes to /arm/joint_states so the Android app
+    # can subscribe to that topic directly via ROSBridge.  A relay node below
+    # forwards /arm/joint_states → /joint_states so robot_state_publisher also
+    # receives arm poses for the full TF tree.
     arm_driver = TimerAction(
         period=4.0,
         actions=[
@@ -94,9 +98,19 @@ def generate_launch_description():
                 name='arm_driver_node',
                 output='screen',
                 parameters=[arm_params],
-                remappings=[('/arm/joint_states', '/joint_states')],
             )
         ]
+    )
+
+    # Relay arm joint states into the shared /joint_states topic so
+    # robot_state_publisher can update arm-link TF alongside wheel joints.
+    arm_joint_state_relay = Node(
+        package='topic_tools',
+        executable='relay',
+        name='arm_joint_state_relay',
+        output='screen',
+        arguments=['/arm/joint_states', '/joint_states'],
+        parameters=[{'use_sim_time': True}],
     )
 
     # ── 6. depthimage_to_laserscan — virtual /scan from Astra Pro depth image ──
@@ -137,6 +151,18 @@ def generate_launch_description():
                 condition=IfCondition(LaunchConfiguration('bev')),
             )
         ]
+    )
+
+    # ── 9a. web_video_server — MJPEG stream for Android CameraView ──────────────
+    # Android MjpegView connects to http://<ip>:8080/stream?topic=/camera/image_raw
+    # This node must be running for the camera feed to appear in the Android app.
+    web_video_server = Node(
+        package='web_video_server',
+        executable='web_video_server',
+        name='web_video_server',
+        output='screen',
+        parameters=[{'port': 8080, 'use_sim_time': True}],
+        condition=IfCondition(LaunchConfiguration('rosbridge')),
     )
 
     # ── 9. ROSBridge — WebSocket on port 9090 (Android app + web clients) ────
@@ -181,8 +207,10 @@ def generate_launch_description():
         spawn_entity,
         bridge,
         arm_driver,
+        arm_joint_state_relay,
         depth_to_scan,
         bev_stitcher,
+        web_video_server,
         rosbridge,
         foxglove_bridge,
         rviz,
