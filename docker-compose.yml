@@ -1,15 +1,22 @@
 # OmniBot full-stack Docker Compose
 #
 # Usage:
-#   cp .env.example .env       # fill in your IPs and API key
-#   docker compose up          # start everything
-#   docker compose up robot    # start only the robot stack
-#   docker compose up vla      # start only the VLA server
+#   cp .env.example .env              # fill in your IPs and API key
+#   docker compose up                 # start everything (single-workstation mode)
+#   docker compose up robot           # start only the robot stack
+#   docker compose up vla             # start only the VLA server
+#
+#   # Deployment profiles:
+#   docker compose --profile single up           # all nodes on one PC
+#   docker compose --profile multi-vla up        # PC1: VLA inference only
+#   docker compose --profile multi-sim up        # PC2: simulation + BEV stitcher
+#   docker compose --profile standalone-bridge up # Pi: standalone ROSBridge only
 #
 # Services:
 #   robot       — ROS 2 base stack (driver + SLAM + Nav2 + ROSBridge)
 #   vla         — FastAPI VLA inference server (requires NVIDIA GPU)
-#   rosbridge   — standalone ROSBridge WebSocket (if not using robot service)
+#   sim_pc      — Simulation workstation (bev_stitcher + RViz, multi mode PC2)
+#   rosbridge   — standalone ROSBridge WebSocket (Pi or single-machine)
 #
 # Hardware access: pass --privileged or individual device flags in .env.
 
@@ -19,6 +26,9 @@ x-ros-env: &ros-env
   ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-30}
   ROS_DISTRO: jazzy
   RCUTILS_LOGGING_BUFFERED_STREAM: "1"
+
+x-ros-peers-multi: &ros-peers-multi
+  ROS_STATIC_PEERS: "${VLA_PC_IP:-192.168.1.100};${PI_IP:-192.168.1.101};${SIM_PC_IP:-192.168.1.102}"
 
 services:
 
@@ -79,6 +89,100 @@ services:
       timeout: 10s
       retries: 3
       start_period: 120s
+
+  # ── Single-workstation profile — VLA ROS 2 node ──────────────────────────
+  # Runs vla_node alongside the robot stack on one machine.
+  # docker compose --profile single up vla-ros
+  vla-ros:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      target: dev
+    image: omnibot/robot:latest
+    network_mode: host
+    environment:
+      <<: *ros-env
+    volumes:
+      - .:/home/ros/workspace:cached
+      - vla_model_cache:/root/.cache/huggingface
+    command: >
+      bash -c "
+        source /opt/ros/jazzy/setup.bash &&
+        cd /home/ros/workspace/robot_ws &&
+        source install/setup.bash &&
+        ros2 launch omnibot_vla vla_desktop.launch.py
+      "
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+    profiles:
+      - single
+
+  # ── Multi-workstation PC1 — VLA ROS 2 node only ──────────────────────────
+  # Run on PC1 (RTX 5060 Ti). Subscribes to camera topics from PC2/Pi via DDS.
+  # docker compose --profile multi-vla up
+  vla-ros-multi:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      target: dev
+    image: omnibot/robot:latest
+    network_mode: host
+    environment:
+      <<: *ros-env
+      <<: *ros-peers-multi
+    volumes:
+      - .:/home/ros/workspace:cached
+      - vla_model_cache:/root/.cache/huggingface
+    command: >
+      bash -c "
+        source /opt/ros/jazzy/setup.bash &&
+        cd /home/ros/workspace/robot_ws &&
+        source install/setup.bash &&
+        ros2 launch omnibot_vla vla_desktop.launch.py
+      "
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+    profiles:
+      - multi-vla
+
+  # ── Multi-workstation PC2 — simulation companion (bev_stitcher + RViz) ───
+  # Run on PC2 (Isaac Sim / Gazebo machine).
+  # Isaac Sim must be started separately (not via Docker).
+  # docker compose --profile multi-sim up
+  sim-pc:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      target: dev
+    image: omnibot/robot:latest
+    network_mode: host
+    environment:
+      <<: *ros-env
+      <<: *ros-peers-multi
+    volumes:
+      - .:/home/ros/workspace:cached
+    command: >
+      bash -c "
+        source /opt/ros/jazzy/setup.bash &&
+        cd /home/ros/workspace/robot_ws &&
+        source install/setup.bash &&
+        ros2 launch omnibot_bringup sim_pc.launch.py rviz:=false
+      "
+    restart: unless-stopped
+    profiles:
+      - multi-sim
 
   # ── Standalone ROSBridge (when robot service is not used) ────────────────
   rosbridge:

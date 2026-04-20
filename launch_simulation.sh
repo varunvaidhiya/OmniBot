@@ -8,20 +8,31 @@ set -eo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSPACE="${SCRIPT_DIR}/robot_ws"
 
-# Align ROS Domain ID to see Pi traffic
+# ---- Deployment mode + DDS peer discovery ----
+# deployment.env is written by `python deploy.py`.
+# single mode: all nodes on one PC — no static peers needed.
+# multi mode:  Pi + VLA PC + Sim PC — unicast peers set below.
+DEPLOY_ENV="${SCRIPT_DIR}/deployment.env"
+NETWORK_ENV="${SCRIPT_DIR}/network.env"
+
+if [[ -f "${DEPLOY_ENV}" ]]; then
+    source "${DEPLOY_ENV}"
+elif [[ -f "${NETWORK_ENV}" ]]; then
+    source "${NETWORK_ENV}"          # legacy fallback
+    DEPLOY_MODE="multi"
+else
+    echo "[WARN] No deployment.env found — run: python deploy.py"
+    DEPLOY_MODE="multi"
+fi
+
 export ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-30}
 
-# ---- Cross-machine DDS peer discovery ----
-# ROS 2 multicast often fails across LAN segments. We use unicast static peers
-# so the workstation can see the Pi's topics (cmd_vel, imu/data, odom, etc.).
-NETWORK_ENV="${SCRIPT_DIR}/network.env"
-if [[ -f "${NETWORK_ENV}" ]]; then
-    source "${NETWORK_ENV}"
-    export ROS_STATIC_PEERS="${WORKSTATION_IP};${PI_IP}"
-    echo "[INFO] DDS peers: ${ROS_STATIC_PEERS}"
+if [[ "${DEPLOY_MODE}" == "single" ]]; then
+    unset ROS_STATIC_PEERS
+    echo "[INFO] Deployment: single workstation (no DDS peers)"
 else
-    echo "[WARN] network.env not found — cross-machine discovery may fail."
-    echo "       Create it from the template at the repo root."
+    export ROS_STATIC_PEERS="${VLA_PC_IP:-${WORKSTATION_IP}};${PI_IP};${SIM_PC_IP}"
+    echo "[INFO] Deployment: multi  |  DDS peers: ${ROS_STATIC_PEERS}"
 fi
 
 # ---- Source ROS 2 base ----
