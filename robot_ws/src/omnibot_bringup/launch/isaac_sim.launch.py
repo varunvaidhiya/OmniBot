@@ -71,9 +71,12 @@ def generate_launch_description():
         'bev', default_value='true',
         description='Launch bev_stitcher_node (required for smolvla_node)'
     )
+    declare_foxglove = DeclareLaunchArgument(
+        'foxglove', default_value='true',
+        description='Launch Foxglove bridge on ws://localhost:8765'
+    )
 
     # ── 1. Robot State Publisher ─────────────────────────────────────────────
-    # Isaac Sim publishes /joint_states; robot_state_publisher propagates TF.
     robot_state_publisher = Node(
         package='robot_state_publisher',
         executable='robot_state_publisher',
@@ -82,10 +85,6 @@ def generate_launch_description():
     )
 
     # ── 2. Arm driver — simulation passthrough mode (4 s delay) ─────────────
-    # Receives /arm/joint_commands, echoes as /arm/joint_states (+ /joint_states
-    # via remap) so RViz can animate the arm.  Isaac Sim also publishes
-    # /arm/joint_states directly; the remap avoids a collision by prefering
-    # the ROS-side driver in simulation mode (set teleop_mode: false).
     arm_driver = TimerAction(
         period=4.0,
         actions=[
@@ -103,9 +102,7 @@ def generate_launch_description():
         ]
     )
 
-    # ── 3. BEV stitcher — required by smolvla_node ───────────────────────────
-    # Isaac Sim publishes 4 individual base cameras; this node stitches them
-    # into /camera/base/bev/image_raw at 30 Hz.
+    # ── 3. BEV stitcher ──────────────────────────────────────────────────────
     bev_stitcher = Node(
         package='omnibot_lerobot',
         executable='bev_stitcher_node.py',
@@ -115,7 +112,40 @@ def generate_launch_description():
         parameters=[bev_params],
     )
 
-    # ── 4. RViz ──────────────────────────────────────────────────────────────
+    # ── 4. depthimage_to_laserscan — virtual /scan from Isaac Sim depth ──────
+    # Isaac Sim publishes /camera/depth/image_raw via omni.isaac.ros2_bridge.
+    # slam_toolbox needs /scan; this converts depth → LaserScan identically
+    # to the Gazebo and hardware pipelines.
+    depth_to_scan = Node(
+        package='depthimage_to_laserscan',
+        executable='depthimage_to_laserscan_node',
+        name='depthimage_to_laserscan',
+        output='screen',
+        parameters=[{
+            'scan_height':  1,
+            'range_min':    0.6,
+            'range_max':    8.0,
+            'output_frame': 'depth_camera_optical_frame',
+        }],
+        remappings=[
+            ('depth',             '/camera/depth/image_raw'),
+            ('depth_camera_info', '/camera/depth/camera_info'),
+            ('scan',              '/scan'),
+        ],
+    )
+
+    # ── 5. Foxglove bridge — browser-based live monitoring ───────────────────
+    # Open https://app.foxglove.dev → Connect → ws://localhost:8765
+    foxglove_bridge = Node(
+        package='foxglove_bridge',
+        executable='foxglove_bridge',
+        name='foxglove_bridge',
+        output='screen',
+        parameters=[{'port': 8765, 'address': '0.0.0.0'}],
+        condition=IfCondition(LaunchConfiguration('foxglove')),
+    )
+
+    # ── 6. RViz ──────────────────────────────────────────────────────────────
     rviz = Node(
         package='rviz2',
         executable='rviz2',
@@ -129,8 +159,11 @@ def generate_launch_description():
         declare_rviz,
         declare_arm,
         declare_bev,
+        declare_foxglove,
         robot_state_publisher,
         arm_driver,
         bev_stitcher,
+        depth_to_scan,
+        foxglove_bridge,
         rviz,
     ])
