@@ -78,6 +78,7 @@ def generate_launch_description():
     vla_device     = LaunchConfiguration('vla_device',     default='cuda')
     vla_4bit       = LaunchConfiguration('vla_4bit',       default='false')
     use_rosbridge  = LaunchConfiguration('use_rosbridge',  default='true')
+    use_foxglove   = LaunchConfiguration('use_foxglove',   default='true')
     use_bev        = LaunchConfiguration('use_bev',        default='true')
 
     # ── Robot driver ──────────────────────────────────────────────────────────
@@ -203,6 +204,19 @@ def generate_launch_description():
         condition=IfCondition(use_rosbridge),
     )
 
+    # ── Foxglove bridge — browser-based live monitoring ───────────────────────
+    # Open https://app.foxglove.dev → Connect → ws://<robot-ip>:8765
+    # Shows: 3D model, camera feeds, map, costmap, arm joints, mission status.
+    # Disable with: hybrid_robot.launch.py use_foxglove:=false
+    foxglove_node = Node(
+        package='foxglove_bridge',
+        executable='foxglove_bridge',
+        name='foxglove_bridge',
+        output='screen',
+        parameters=[{'port': 8765, 'address': '0.0.0.0'}],
+        condition=IfCondition(use_foxglove),
+    )
+
     # ── RViz (optional) ───────────────────────────────────────────────────────
     rviz_config = os.path.join(
         pkg_description, 'config', 'omnibot_navigation.rviz')
@@ -237,6 +251,9 @@ def generate_launch_description():
             'use_rosbridge', default_value='true',
             description='Start ROSBridge WebSocket server on port 9090 for Android app'),
         DeclareLaunchArgument(
+            'use_foxglove', default_value='true',
+            description='Start Foxglove bridge on port 8765 for browser-based monitoring'),
+        DeclareLaunchArgument(
             'use_bev', default_value='true',
             description='Start BEV stitcher node (required by SmolVLA)'),
 
@@ -251,5 +268,6 @@ def generate_launch_description():
         mission_planner_node,
         bev_stitcher_node,
         rosbridge_node,
+        foxglove_node,
         rviz_node,
     ])
