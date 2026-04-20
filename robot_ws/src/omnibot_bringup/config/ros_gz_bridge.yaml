@@ -2,6 +2,15 @@
 # ros_gz_bridge configuration for Mecanum Wheel Robot simulation
 # Direction: ROS → GZ uses subscriber_queue_size; GZ → ROS uses publisher_queue_size
 
+# ── Simulation clock — must be bridged first so all ROS nodes see sim time ──────
+# Without this, TF timestamps from Gazebo (sim time) won't match ROS wall clock,
+# causing TF lookups to fail and the robot to appear frozen in RViz.
+- ros_topic_name: "/clock"
+  gz_topic_name: "/clock"
+  ros_type_name: "rosgraph_msgs/msg/Clock"
+  gz_type_name: "gz.msgs.Clock"
+  direction: GZ_TO_ROS
+
 # ── Joint states — wheels (Gazebo JointStatePublisher → robot_state_publisher) ──
 # gz.msgs.Model is the Gazebo Harmonic type published by gz-sim-joint-state-publisher-system.
 - ros_topic_name: "/joint_states"

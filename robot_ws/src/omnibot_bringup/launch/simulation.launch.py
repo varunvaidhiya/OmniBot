@@ -56,7 +56,7 @@ def generate_launch_description():
         package='robot_state_publisher',
         executable='robot_state_publisher',
         output='screen',
-        parameters=[{'robot_description': robot_desc}]
+        parameters=[{'robot_description': robot_desc, 'use_sim_time': True}]
     )
 
     # ── 3. Spawn robot — wait 3 s for RSP to publish /robot_description ──────
@@ -115,6 +115,7 @@ def generate_launch_description():
             'range_min':     0.6,
             'range_max':     8.0,
             'output_frame':  'depth_camera_optical_frame',
+            'use_sim_time':  True,
         }],
         remappings=[
             ('depth',          '/camera/depth/image_raw'),
