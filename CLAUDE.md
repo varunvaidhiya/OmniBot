@@ -72,19 +72,27 @@ Mecanum-Wheel-Robot/
 │   ├── configs/                   # RViz configs (perception/navigation/manipulation) + Foxglove layout
 │   └── scripts/                   # build_usd.sh (URDF→Isaac Sim USD), setup_omnigraph.py
 ├── android_app/                   # Kotlin MVVM app (ROSBridge WebSocket)
+├── data_engine/
+│   └── isaac_sim/                 # Isaac Sim episode collection (Replicator)
 ├── confirmed_protocol.py          # Yahboom protocol reference (root debug script)
+├── deploy.py                      # Deployment mode configurator (single/multi)
+├── deployment.env.example         # Template for deployment.env
 ├── network.env                    # Cross-machine DDS peer IPs (edit before multi-machine use)
 ├── docker-compose.yml             # Full-stack Docker Compose (robot + vla + rosbridge services)
-├── launch_simulation.sh           # Convenience build+launch for Gazebo (sets ROS_DOMAIN_ID=30)
+├── launch_simulation.sh           # Convenience build+launch for Gazebo (single or multi)
 ├── launch_teleop.sh               # Convenience teleop launcher (sources network.env for DDS peers)
 ├── launch_rosbridge.sh            # Start ROSBridge WebSocket server for Android app
 ├── launch_mobile_manipulation.sh  # Mobile manipulation bringup (base + arm + cameras + rosbridge)
+├── launch_sim_pc.sh               # PC2 launch script (multi-workstation mode)
 └── fuzz_*.py, scan_*.py, ...      # Hardware debug scripts — NOT part of ROS
 ```
 
 > **Root-level `*.py` files** (`fuzz_*.py`, `scan_*.py`, `test_*.py`,
 > `analyze_*.py`, `confirmed_protocol.py`, etc.) are hardware debugging/
 > protocol-reverse-engineering scripts. Do not treat them as ROS nodes or tests.
+>
+> **`deploy.py`** is the exception — it is the deployment configurator and
+> should be run as `python deploy.py` before first launch.
 
 ---
 
@@ -117,6 +125,26 @@ cd data_engine && pytest tests/
 
 ---
 
+## Deployment Configuration
+
+Run once before first launch to set up single vs multi-workstation mode:
+
+```bash
+python deploy.py              # interactive menu
+python deploy.py --mode single                          # non-interactive
+python deploy.py --mode multi --vla-ip 192.168.1.100 \
+    --pi-ip 192.168.1.101 --sim-ip 192.168.1.102       # non-interactive
+python deploy.py --show       # print current config
+```
+
+Writes `deployment.env` which all launch scripts source automatically.
+
+**Deployment modes:**
+- `single` — all nodes on one workstation (e.g. RTX 5090). No DDS peers set.
+- `multi` — three machines: Pi (robot) + PC1 (VLA inference) + PC2 (Isaac Sim / Gazebo).
+
+---
+
 ## Launch Commands
 
 ```bash
@@ -140,6 +168,12 @@ ros2 launch omnibot_bringup mobile_manipulation.launch.py   # direct
 # ROSBridge WebSocket (required for Android app, port 9090)
 ./launch_rosbridge.sh            # convenience: shows local IP for Android config
 ros2 launch rosbridge_server rosbridge_websocket_launch.xml port:=9090
+
+# Isaac Sim companion nodes (bev_stitcher + RViz) — Isaac Sim must already be running
+ros2 launch omnibot_bringup isaac_sim.launch.py
+
+# PC2 simulation workstation (multi mode) — runs bev_stitcher + RViz
+./launch_sim_pc.sh
 
 # Autonomous navigation with SLAM
 ros2 launch omnibot_navigation autonomous_robot.launch.py

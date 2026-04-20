@@ -8,17 +8,28 @@ set -eo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSPACE="${SCRIPT_DIR}/robot_ws"
 
-# ---- ROS Domain (must match all terminals) ----
+# ---- Deployment mode + DDS peer discovery ----
+DEPLOY_ENV="${SCRIPT_DIR}/deployment.env"
+NETWORK_ENV="${SCRIPT_DIR}/network.env"
+
+if [[ -f "${DEPLOY_ENV}" ]]; then
+    source "${DEPLOY_ENV}"
+elif [[ -f "${NETWORK_ENV}" ]]; then
+    source "${NETWORK_ENV}"
+    DEPLOY_MODE="multi"
+else
+    echo "[WARN] No deployment.env found — run: python deploy.py"
+    DEPLOY_MODE="multi"
+fi
+
 export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-30}"
 
-# ---- Cross-machine DDS peer discovery ----
-NETWORK_ENV="${SCRIPT_DIR}/network.env"
-if [[ -f "${NETWORK_ENV}" ]]; then
-    source "${NETWORK_ENV}"
-    export ROS_STATIC_PEERS="${WORKSTATION_IP};${PI_IP}"
-    echo "[INFO] DDS peers: ${ROS_STATIC_PEERS}"
+if [[ "${DEPLOY_MODE}" == "single" ]]; then
+    unset ROS_STATIC_PEERS
+    echo "[INFO] Deployment: single workstation (no DDS peers)"
 else
-    echo "[WARN] network.env not found — cross-machine discovery may fail."
+    export ROS_STATIC_PEERS="${VLA_PC_IP:-${WORKSTATION_IP}};${PI_IP};${SIM_PC_IP}"
+    echo "[INFO] Deployment: multi  |  DDS peers: ${ROS_STATIC_PEERS}"
 fi
 
 # ---- Source ROS 2 base ----
