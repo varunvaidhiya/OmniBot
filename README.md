@@ -6,6 +6,40 @@ OmniBot Open gives you everything you need to build the robot, drive it via Xbox
 controller or Android app, and collect high-quality teleoperation demonstrations
 for imitation learning — no cloud dependency, no subscription, no AI required.
 
+<p align="center">
+  <img src="assets/PXL_20260505_121303728.jpg" width="49%" />
+  <img src="assets/PXL_20260505_121328008.jpg" width="49%" />
+</p>
+
+<p align="center">
+  <img src="assets/Omnibot_demo1.gif" width="49%" />
+  <img src="assets/Omnibot_demo2.gif" width="49%" />
+</p>
+
+<p align="center">
+  <a href="https://www.youtube.com/@varun.vaidhiya/videos">
+    <img src="https://img.shields.io/badge/YouTube-demos%20%26%20updates-red?logo=youtube&logoColor=white"/>
+  </a>
+  &nbsp;
+  <a href="https://x.com/varunvaidhiya">
+    <img src="https://img.shields.io/badge/X%20%2F%20Twitter-@varunvaidhiya-black?logo=x&logoColor=white"/>
+  </a>
+  &nbsp;
+  <img src="https://img.shields.io/badge/ROS_2-Jazzy-brightgreen"/>
+  &nbsp;
+  <img src="https://img.shields.io/badge/License-Apache_2.0-blue"/>
+</p>
+
+---
+
+## Follow for Updates
+
+This project is actively developed. For regular updates on new features,
+hardware builds, and demo videos:
+
+- **YouTube**: [youtube.com/@varun.vaidhiya](https://www.youtube.com/@varun.vaidhiya/videos) — build logs, demo videos, teleoperation walkthroughs
+- **X / Twitter**: [@varunvaidhiya](https://x.com/varunvaidhiya) — progress updates, behind-the-scenes, early previews
+
 ---
 
 ## OmniBot Full (coming soon)
@@ -27,9 +61,9 @@ The full version will include everything in OmniBot Open, plus:
   mission control
 
 **All teleoperation demos, Android app walkthroughs, and data collection demos
-will be released alongside the full version.**
+will be released alongside the full version** on [YouTube](https://www.youtube.com/@varun.vaidhiya/videos).
 
-Watch this repo for updates, or star it to get notified.
+Watch this repo and follow on [X](https://x.com/varunvaidhiya) for updates.
 
 ---
 
@@ -60,7 +94,8 @@ Watch this repo for updates, or star it to get notified.
 
 ## Demos
 
-> Full video demos are being recorded and will be published when OmniBot Full
+> Full video demos are being recorded and will be published on
+> [YouTube](https://www.youtube.com/@varun.vaidhiya/videos) when OmniBot Full
 > launches. The sections below describe exactly what each demo will show.
 
 ### Xbox Teleoperation Demo
@@ -131,8 +166,8 @@ motor board is the Yahboom expansion board via USB serial (`/dev/ttyUSB0`).
 ### 2. Build
 
 ```bash
-git clone https://github.com/your-org/omnibot-open
-cd omnibot-open
+git clone https://github.com/varunvaidhiya/OmniBot-Open
+cd OmniBot-Open
 
 source /opt/ros/jazzy/setup.bash
 cd robot_ws
