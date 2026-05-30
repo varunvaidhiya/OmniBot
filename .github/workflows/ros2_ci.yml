@@ -1,0 +1,78 @@
+name: ROS 2 CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up ROS 2 Jazzy
+        uses: ros-tooling/setup-ros@v0.7
+        with:
+          required-ros-distributions: jazzy
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            python3-pip \
+            ros-jazzy-robot-state-publisher \
+            ros-jazzy-joint-state-publisher \
+            ros-jazzy-xacro \
+            ros-jazzy-rviz2 \
+            ros-jazzy-joy \
+            ros-jazzy-teleop-twist-joy \
+            ros-jazzy-robot-localization \
+            ros-jazzy-rosbridge-server \
+            ros-jazzy-cv-bridge \
+            ros-jazzy-sensor-msgs \
+            ros-jazzy-geometry-msgs \
+            ros-jazzy-nav-msgs \
+            ros-jazzy-std-msgs
+          pip install numpy opencv-python lerobot
+
+      - name: Clone serial-ros2 (FetchContent dependency)
+        run: |
+          mkdir -p robot_ws/src/serial
+          git clone https://github.com/RoverRobotics-forks/serial-ros2.git robot_ws/src/serial
+
+      - name: Install rosdep dependencies
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          rosdep update
+          rosdep install --from-paths robot_ws/src \
+            --ignore-src -y \
+            --skip-keys "omnibot_navigation omnibot_hybrid omnibot_vla omnibot_rl omnibot_orchestration foxglove_bridge astra_camera usb_cam depthimage_to_laserscan"
+
+      - name: Build (open packages only)
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          cd robot_ws
+          colcon build --symlink-install \
+            --packages-select \
+              omnibot_description \
+              omnibot_driver \
+              omnibot_arm \
+              omnibot_bringup \
+              omnibot_lerobot
+
+      - name: Test
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          cd robot_ws
+          source install/setup.bash
+          colcon test \
+            --packages-select \
+              omnibot_description \
+              omnibot_driver \
+              omnibot_arm \
+              omnibot_bringup \
+              omnibot_lerobot
+          colcon test-result --verbose
