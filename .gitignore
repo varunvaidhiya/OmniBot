@@ -1,0 +1,28 @@
+# Local automation scripts (not for public repo)
+daily_content.py
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+dist/
+build/
+
+# ROS 2 build artifacts
+robot_ws/build/
+robot_ws/install/
+robot_ws/log/
+
+# Deployment config (contains IP addresses)
+deployment.env
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
