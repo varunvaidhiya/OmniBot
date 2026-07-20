@@ -32,6 +32,15 @@ for imitation learning — no cloud dependency, no subscription, no AI required.
 
 ---
 
+## 📖 Build Guide
+
+New here? Start with the **[staged build guide](docs/building-omnibot.md)** —
+it takes you from a box of parts to recording imitation-learning datasets in
+eight validated stages, with a troubleshooting matrix and a full
+[Bill of Materials](docs/BILL_OF_MATERIALS.md).
+
+---
+
 ## Follow for Updates
 
 This project is actively developed. For regular updates on new features,
@@ -74,6 +83,7 @@ Watch this repo and follow on [X](https://x.com/varunvaidhiya) for updates.
 | **Hardware description** | URDF, xacro, STL meshes — full assembly reference |
 | **Yahboom base driver** | Serial driver for the Yahboom expansion board (`omnibot_driver`) |
 | **SO-101 arm driver** | 6-DOF arm via LeRobot FeetechMotorsBus (`omnibot_arm`) |
+| **Servo bring-up tool** | Feetech ID assignment, home capture, direction check (`configure_servos.py`) |
 | **Xbox teleoperation** | Joy node + teleop_twist_joy, configurable button mapping |
 | **Android app** | Kotlin MVVM app — virtual joystick, arm sliders, camera feeds, emergency stop |
 | **VR teleoperation** | Placeholder package (`omnibot_vr_teleop`) — contribution welcome |
@@ -127,7 +137,8 @@ Watch this repo and follow on [X](https://x.com/varunvaidhiya) for updates.
 
 ## Hardware BOM
 
-> **TODO**: Add a full Bill of Materials with links and approximate costs.
+📄 **Full Bill of Materials with quantities and approximate costs:
+[`docs/BILL_OF_MATERIALS.md`](docs/BILL_OF_MATERIALS.md)**
 
 Key components:
 - Yahboom ROS Robot Expansion Board (mecanum drive, USB serial)
@@ -146,7 +157,11 @@ dimensions and joint placements.
 
 ## Assembly Guide
 
-> **TODO**: Add step-by-step hardware assembly instructions with photos.
+📖 **Full staged build guide — from a box of parts to imitation-learning data:
+[`docs/building-omnibot.md`](docs/building-omnibot.md).** It walks all eight
+bring-up stages (assembly → compute → base → servo config → teleop → perception
+→ app → data collection) with a success criterion for each, plus a troubleshooting
+matrix. Photo walkthroughs are being recorded for [YouTube](https://www.youtube.com/@varun.vaidhiya/videos).
 
 Reference the URDF at `robot_ws/src/omnibot_description/urdf/omnibot.urdf.xacro`
 for link geometry and joint limits. The firmware package
@@ -343,7 +358,8 @@ Contributions are especially welcome for:
 - **Camera calibration**: intrinsics + extrinsics for BEV stitcher
 - **Tests**: driver unit tests, kinematics edge cases
 
-Please open an issue before starting large features.
+Please open an issue before starting large features. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for setup, test, and PR guidelines.
 
 ---
 
