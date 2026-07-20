@@ -13,6 +13,8 @@ find_package(rclpy REQUIRED)
 install(
   PROGRAMS
     scripts/arm_driver_node.py
+    scripts/arm_command_relay.py
+    scripts/configure_servos.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -32,6 +34,10 @@ if(BUILD_TESTING)
   find_package(ament_cmake_pytest REQUIRED)
   ament_add_pytest_test(test_arm_driver
     test/test_arm_driver.py
+    TIMEOUT 60
+  )
+  ament_add_pytest_test(test_configure_servos
+    test/test_configure_servos.py
     TIMEOUT 60
   )
 endif()
