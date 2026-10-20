@@ -301,4 +301,4 @@ MIT
 
 ## Contact
 
-Varun Vaidhiya — varun.vaidhiya@gmail.com
+Varun Vaidhiya — varun@ohho-robotics.com

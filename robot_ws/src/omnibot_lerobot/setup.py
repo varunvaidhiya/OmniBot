@@ -23,7 +23,7 @@ setup(
     install_requires=["setuptools"],
     zip_safe=True,
     maintainer="OmniBot Contributors",
-    maintainer_email="varun.vaidhiya@gmail.com",
+    maintainer_email="varun@ohho-robotics.com",
     description="LeRobot teleoperation data recorder for OmniBot",
     license="Apache-2.0",
     tests_require=["pytest"],
